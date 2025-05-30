@@ -9,10 +9,9 @@ use clientele::{
 use miette::{IntoDiagnostic, Result, miette};
 use oxrdf::{Literal, NamedNode, Triple};
 
-/// ASIMOV Telegram Cataloguer
+/// ASIMOV Telegram Cataloger
 #[derive(Debug, Parser)]
-#[command(name = "asimov-telegram-cataloguer", long_about)]
-// #[command(arg_required_else_help = true)]
+#[command(name = "asimov-telegram-cataloger", long_about)]
 struct Options {
     #[clap(flatten)]
     flags: StandardOptions,
