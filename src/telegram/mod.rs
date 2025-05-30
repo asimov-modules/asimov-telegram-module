@@ -64,6 +64,8 @@ pub struct Config {
 
 struct TdHandle(NonNull<c_void>);
 
+// I *think* this is ok? If not will just have to start a second worker thread
+// that does all the `td_json_client_send`.
 unsafe impl Send for TdHandle {}
 unsafe impl Sync for TdHandle {}
 
@@ -268,7 +270,7 @@ impl Client {
         matches!(*self.state.read().await, State::Authorized { .. })
     }
 
-    pub async fn needs_code(&self) -> bool {
+    pub async fn is_need_code(&self) -> bool {
         matches!(*self.state.read().await, State::AwaitingCode)
     }
 
@@ -315,7 +317,7 @@ impl Client {
     pub async fn get_supergroups(&self) -> Result<BTreeMap<i64, SupergroupData>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
-        // TODO: Gets stuck when callen after `get_chats`?
+        // TODO: Gets stuck when called after `get_chats`?
 
         // let req = json!({ "@type": "getChats", "chat_list": null, "limit": "50" });
         // let resp = self

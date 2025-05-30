@@ -19,12 +19,12 @@ publish = true
 [features]
 default = ["all", "std"]
 all = []
-std = ["asimov-module/std", "serde/std", "serde_json/std", "tracing/std", "tracing-subscriber/std"]
+std = ["asimov-module/std", "clientele/std", "serde/std", "serde_json/std", "tracing/std", "tracing-subscriber/std"]
 unstable = []
 
 [dependencies]
 asimov-module = { version = "25.0.0-dev.7", default-features = false }
-clientele = "0.3.5"
+clientele = { version = "0.3.5", defeult-features = false, features = ["all", "clap", "dotenv"] }
 jq = { version = "0.1", default-features = false, features = ["all"] }
 miette = { version = "7.6", default-features = false, features = ["fancy"] }
 oxrdf = { version = "0.2.4", default-features = false }
