@@ -59,8 +59,9 @@ async fn main() -> Result<SysexitsError> {
         database_directory: data_dir.into(),
         api_id: std::env::var("API_ID").expect("API_ID must be set"),
         api_hash: std::env::var("API_HASH").expect("API_HASH must be set"),
+        filter: Some(asimov_telegram_module::jq::filter().clone()),
     };
-    let client = Client::new().unwrap().init(config).await.unwrap();
+    let client = Client::new(config).unwrap().init().await.unwrap();
 
     match options.command {
         Some(Command::SendCode { phone }) => {

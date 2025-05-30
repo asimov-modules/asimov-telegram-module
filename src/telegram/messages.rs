@@ -6,19 +6,19 @@ use std::{collections::BTreeMap, string::String, vec::Vec};
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "@type", rename_all = "camelCase")]
 pub enum TdLibResponse {
-    Ok {
-        #[serde(rename = "@extra")]
-        extra: String,
-    },
+    // Ok {
+    //     #[serde(rename = "@extra")]
+    //     extra: String,
+    // },
     UpdateAuthorizationState {
         authorization_state: UpdateAuthState,
     },
-    Chats {
-        #[serde(rename = "@extra")]
-        extra: String,
-        total_count: u64,
-        chat_ids: Vec<i64>,
-    },
+    // Chats {
+    //     #[serde(rename = "@extra")]
+    //     extra: String,
+    //     total_count: u64,
+    //     chat_ids: Vec<i64>,
+    // },
     UpdateSuperGroup {
         supergroup: UpdateSupergroup,
     },
