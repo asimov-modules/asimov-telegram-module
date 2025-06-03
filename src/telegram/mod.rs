@@ -9,9 +9,11 @@ use std::{
     path::PathBuf,
     ptr::NonNull,
     string::{String, ToString},
-    sync::Arc,
-    sync::atomic::{AtomicU64, Ordering},
-    vec::Vec,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    vec,
 };
 use tokio::sync::{RwLock, oneshot};
 
@@ -34,20 +36,9 @@ enum State {
     AwaitingPhoneNumber,
     AwaitingCode,
     Authorized {
-        chats: BTreeMap<i64, ChatData>,
-        supergroups: BTreeMap<i64, SupergroupData>,
+        chats: BTreeMap<i64, Value>,
+        supergroups: BTreeMap<i64, Value>,
     },
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ChatData {
-    pub title: Option<String>,
-    pub supergroup: Option<i64>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SupergroupData {
-    pub usernames: BTreeSet<String>,
 }
 
 #[derive(Clone)]
@@ -55,7 +46,6 @@ pub struct Config {
     pub api_id: String,
     pub api_hash: String,
     pub database_directory: PathBuf,
-    pub filter: Option<jq::JsonFilter>,
 }
 
 struct TdHandle(NonNull<c_void>);
@@ -93,7 +83,6 @@ impl Client {
         let _receiver_handle = tokio::task::spawn_blocking({
             let handle = handle.clone();
             let state = state.clone();
-            let filter = config.filter.clone();
             move || {
                 let mut pending_reqs: BTreeMap<u64, oneshot::Sender<Value>> = BTreeMap::new();
                 loop {
@@ -114,16 +103,6 @@ impl Client {
                     tracing::trace!(msg=%resp, "Received message");
 
                     let resp = serde_json::from_str::<Value>(&resp).unwrap();
-
-                    if let Some(filter) = &filter {
-                        match filter.filter_json(resp.clone()) {
-                            Ok(val) => (),
-                            Err(jq::JsonFilterError::NoOutput) => (),
-                            Err(err) => {
-                                tracing::error!(?err,);
-                            }
-                        }
-                    }
 
                     if let Some(id) = resp.get("@extra").and_then(Value::as_str) {
                         id.parse()
@@ -157,22 +136,7 @@ impl Client {
                             else {
                                 continue;
                             };
-
-                            let entry = chats.entry(chat.id).or_default();
-                            entry.title = Some(chat.title);
-                            if let Some(typ) = chat.other.get("type").and_then(Value::as_object) {
-                                if typ
-                                    .get("@type")
-                                    .and_then(Value::as_str)
-                                    .is_some_and(|typ| typ == "chatTypeSupergroup")
-                                {
-                                    if let Some(id) =
-                                        typ.get("supergroup_id").and_then(Value::as_i64)
-                                    {
-                                        entry.supergroup = Some(id)
-                                    }
-                                }
-                            }
+                            chats.insert(chat.id, resp);
                         }
                         Ok(TdLibResponse::UpdateSuperGroup { supergroup }) => {
                             let State::Authorized {
@@ -182,23 +146,7 @@ impl Client {
                             else {
                                 continue;
                             };
-
-                            let entry = supergroups.entry(supergroup.id).or_default();
-
-                            let usernames: Vec<String> = supergroup
-                                .other
-                                .get("usernames")
-                                .and_then(Value::as_object)
-                                .and_then(|o| o.get("active_usernames"))
-                                .and_then(Value::as_array)
-                                .cloned()
-                                .unwrap_or_else(Vec::new)
-                                .iter()
-                                .filter_map(Value::as_str)
-                                .map(String::from)
-                                .collect();
-
-                            entry.usernames.extend(usernames)
+                            supergroups.insert(supergroup.id, resp);
                         }
                         Err(_) => {
                             // ignore for now
@@ -291,7 +239,7 @@ impl Client {
         Ok(chats.iter().map(|(id, _)| *id).collect())
     }
 
-    pub async fn get_chats(&self) -> Result<BTreeMap<i64, ChatData>> {
+    pub async fn get_chats(&self) -> Result<BTreeMap<i64, Value>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
         self.load_chats().await.context("Failed to load chats")?;
@@ -303,7 +251,7 @@ impl Client {
         Ok(chats.clone())
     }
 
-    pub async fn get_supergroups(&self) -> Result<BTreeMap<i64, SupergroupData>> {
+    pub async fn get_supergroups(&self) -> Result<BTreeMap<i64, Value>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
         self.load_chats().await.context("Failed to load chats")?;
@@ -321,9 +269,9 @@ impl Client {
     async fn load_chats(&self) -> Result<()> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
-        let chat_lists = std::vec![
+        let chat_lists = vec![
             json!({"@type": "chatListMain"}),
-            json!({"@type": "chatListArchive"})
+            json!({"@type": "chatListArchive"}),
         ];
 
         for list in chat_lists {
