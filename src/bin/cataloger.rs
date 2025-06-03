@@ -59,7 +59,6 @@ async fn main() -> Result<SysexitsError> {
         database_directory: data_dir.into(),
         api_id: std::env::var("API_ID").expect("API_ID must be set"),
         api_hash: std::env::var("API_HASH").expect("API_HASH must be set"),
-        filter: Some(asimov_telegram_module::jq::filter().clone()),
     };
     let client = Client::new(config).unwrap().init().await.unwrap();
 
@@ -89,48 +88,69 @@ async fn main() -> Result<SysexitsError> {
         ));
     }
 
-    let mut ser = oxrdfio::RdfSerializer::from_format(oxrdfio::RdfFormat::Turtle)
-        .with_prefix("know", "http://know.dev/")
-        .unwrap()
-        .for_writer(std::io::stdout());
+    // let mut ser = oxrdfio::RdfSerializer::from_format(oxrdfio::RdfFormat::Turtle)
+    //     .with_prefix("know", "http://know.dev/")
+    //     .unwrap()
+    //     .for_writer(std::io::stdout());
+
+    let filter = asimov_telegram_module::jq::filter();
 
     let chats = client.get_chats().await?;
-
-    for (id, data) in chats {
-        let sub = NamedNode::new(format!("http://know.dev/chat/#{}", id)).unwrap();
-        if let Some(title) = data.title {
-            let triple = Triple::new(
-                sub.clone(),
-                NamedNode::new("http://know.dev/title").unwrap(),
-                Literal::new_simple_literal(title),
-            );
-            ser.serialize_triple(&triple).into_diagnostic()?;
-        }
-        if let Some(supergroup) = data.supergroup {
-            let triple = Triple::new(
-                sub.clone(),
-                NamedNode::new("http://know.dev/supergroup").unwrap(),
-                Literal::new_simple_literal(supergroup.to_string()), // TODO: typed literal
-            );
-            ser.serialize_triple(&triple).into_diagnostic()?;
+    for (_id, chat) in chats {
+        match filter.filter_json(chat) {
+            Ok(_) => (), // TODO: print as json or RDF?
+            Err(jq::JsonFilterError::NoOutput) => (),
+            Err(err) => {
+                tracing::error!(?err);
+            }
         }
     }
+
+    // for (id, data) in chats {
+    //     let sub = NamedNode::new(format!("http://know.dev/chat/#{}", id)).unwrap();
+    //     if let Some(title) = data.title {
+    //         let triple = Triple::new(
+    //             sub.clone(),
+    //             NamedNode::new("http://know.dev/title").unwrap(),
+    //             Literal::new_simple_literal(title),
+    //         );
+    //         ser.serialize_triple(&triple).into_diagnostic()?;
+    //     }
+    //     if let Some(supergroup) = data.supergroup {
+    //         let triple = Triple::new(
+    //             sub.clone(),
+    //             NamedNode::new("http://know.dev/supergroup").unwrap(),
+    //             Literal::new_simple_literal(supergroup.to_string()), // TODO: typed literal
+    //         );
+    //         ser.serialize_triple(&triple).into_diagnostic()?;
+    //     }
+    // }
+    //
 
     let supergroups = client.get_supergroups().await?;
-
-    for (id, data) in supergroups {
-        let sub = NamedNode::new(format!("http://know.dev/supergroup/#{}", id)).unwrap();
-        for name in data.usernames {
-            let triple = Triple::new(
-                sub.clone(),
-                NamedNode::new("http://know.dev/username").unwrap(),
-                Literal::new_simple_literal(name),
-            );
-            ser.serialize_triple(&triple).into_diagnostic()?;
+    for (_id, supergroup) in supergroups {
+        match filter.filter_json(supergroup) {
+            Ok(_) => (), // TODO: print as json or RDF?
+            Err(jq::JsonFilterError::NoOutput) => (),
+            Err(err) => {
+                tracing::error!(?err);
+            }
         }
     }
 
-    ser.finish().into_diagnostic()?;
+    // for (id, data) in supergroups {
+    //     let sub = NamedNode::new(format!("http://know.dev/supergroup/#{}", id)).unwrap();
+    //     for name in data.usernames {
+    //         let triple = Triple::new(
+    //             sub.clone(),
+    //             NamedNode::new("http://know.dev/username").unwrap(),
+    //             Literal::new_simple_literal(name),
+    //         );
+    //         ser.serialize_triple(&triple).into_diagnostic()?;
+    //     }
+    // }
+
+    // ser.finish().into_diagnostic()?;
 
     Ok(EX_OK)
 }

@@ -43,4 +43,4 @@ lto = "thin"
 
 [[bin]]
 name = "asimov-telegram-cataloger"
-path = "src/main.rs"
+path = "src/bin/cataloger.rs"
