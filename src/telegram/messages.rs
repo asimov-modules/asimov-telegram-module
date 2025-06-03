@@ -1,7 +1,7 @@
 // This is free and unencumbered software released into the public domain.
 
 use serde_json::Value;
-use std::{collections::BTreeMap, string::String, vec::Vec};
+use std::{collections::BTreeMap, string::String};
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "@type", rename_all = "camelCase")]
@@ -9,11 +9,14 @@ pub enum TdLibResponse {
     UpdateAuthorizationState {
         authorization_state: UpdateAuthState,
     },
+    UpdateNewChat {
+        chat: UpdateNewChat,
+    },
     UpdateSuperGroup {
         supergroup: UpdateSupergroup,
     },
-    UpdateNewChat {
-        chat: UpdateNewChat,
+    UpdateUser {
+        user: UpdateUser,
     },
 }
 
@@ -38,12 +41,7 @@ pub enum AuthState {
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct UpdateNewChat {
-    #[serde(rename = "@type")]
-    pub typ: String,
-
     pub id: i64,
-
-    pub title: String,
 
     #[serde(flatten)]
     pub other: BTreeMap<String, Value>,
@@ -51,9 +49,14 @@ pub struct UpdateNewChat {
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct UpdateSupergroup {
-    #[serde(rename = "@type")]
-    pub typ: String,
+    pub id: i64,
 
+    #[serde(flatten)]
+    pub other: BTreeMap<String, Value>,
+}
+
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+pub struct UpdateUser {
     pub id: i64,
 
     #[serde(flatten)]

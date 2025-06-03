@@ -14,6 +14,7 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
     vec,
+    vec::Vec,
 };
 use tokio::sync::{RwLock, oneshot};
 
@@ -38,6 +39,7 @@ enum State {
     Authorized {
         chats: BTreeMap<i64, Value>,
         supergroups: BTreeMap<i64, Value>,
+        users: BTreeMap<i64, Value>,
     },
 }
 
@@ -128,6 +130,7 @@ impl Client {
                                 *state.blocking_write() = State::Authorized {
                                     chats: Default::default(),
                                     supergroups: Default::default(),
+                                    users: Default::default(),
                                 };
                             }
                         },
@@ -147,6 +150,13 @@ impl Client {
                                 continue;
                             };
                             supergroups.insert(supergroup.id, resp);
+                        }
+                        Ok(TdLibResponse::UpdateUser { user }) => {
+                            let State::Authorized { ref mut users, .. } = *state.blocking_write()
+                            else {
+                                continue;
+                            };
+                            users.insert(user.id, resp);
                         }
                         Err(_) => {
                             // ignore for now
@@ -251,6 +261,129 @@ impl Client {
         Ok(chats.clone())
     }
 
+    pub async fn get_chat_members(&self) -> Result<BTreeMap<i64, Vec<Value>>> {
+        assert!(matches!(*self.state.read().await, State::Authorized { .. }));
+
+        let mut members: BTreeMap<i64, Vec<Value>> = BTreeMap::new();
+
+        let chats = self.get_chats().await.context("Failed to get chat IDs")?;
+
+        let basicgroups: Vec<(i64, &Value)> = chats
+            .iter()
+            .filter_map(|(id, val)| {
+                let is_basicgroup = val
+                    .as_object()?
+                    .get("chat")?
+                    .as_object()?
+                    .get("type")?
+                    .as_object()?
+                    .get("@type")?
+                    .as_str()
+                    .is_some_and(|t| t == "chatTypeBasicGroup");
+                if is_basicgroup {
+                    Some((*id, val))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for (id, _g) in basicgroups {
+            let group_members = self.get_basicgroup_members(id).await?;
+            members.entry(id).or_default().extend(group_members);
+        }
+
+        let supergroups: Vec<(i64, &Value)> = chats
+            .iter()
+            .filter_map(|(_, val)| {
+                let c = val
+                    .as_object()
+                    .and_then(|c| c.get("chat"))
+                    .and_then(Value::as_object)?;
+
+                let is_supergroup = c
+                    .get("type")?
+                    .as_object()?
+                    .get("@type")?
+                    .as_str()
+                    .is_some_and(|t| t == "chatTypeSupergroup");
+
+                let is_channel = c.get("type")?.as_object()?.get("is_channel")?.as_bool()?;
+
+                let sg_id = c.get("type")?.as_object()?.get("supergroup_id")?.as_i64()?;
+
+                if is_supergroup && !is_channel {
+                    Some((sg_id, val))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for (id, _sg) in supergroups {
+            let group_members = self.get_supergroup_members(id, None).await?;
+            members.entry(id).or_default().extend(group_members);
+        }
+
+        Ok(members)
+    }
+
+    pub async fn get_basicgroup_members(&self, basicgroup_id: i64) -> Result<Vec<Value>> {
+        let req = json!({ "@type": "getBasicGroupFullInfo", "basic_group_id": basicgroup_id });
+        let resp = self.request(req).await?;
+
+        let group_members = resp
+            .as_object()
+            .and_then(|r| r.get("basicGroupFullInfo"))
+            .and_then(Value::as_object)
+            .and_then(|i| i.get("members"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+
+        Ok(group_members)
+    }
+
+    pub async fn get_supergroup_members(
+        &self,
+        supergroup_id: i64,
+        max_amount: Option<usize>,
+    ) -> Result<Vec<Value>> {
+        let mut members = Vec::new();
+        loop {
+            let req = json!({ "@type": "getSupergroupMembers", "supergroup_id": supergroup_id, "offset": members.len(), "limit": 200 });
+            let resp = self.request(req).await?;
+
+            let Some(group_members) = resp
+                .as_object()
+                .and_then(|r| r.get("members"))
+                .and_then(Value::as_array)
+            else {
+                break;
+            };
+
+            if group_members.is_empty() {
+                break;
+            }
+
+            if let Some(max) = max_amount {
+                let remaining = max.saturating_sub(members.len());
+                if remaining == 0 {
+                    break;
+                }
+                let take_amount = remaining.min(group_members.len());
+                members.extend_from_slice(&group_members[..take_amount]);
+                if members.len() >= max {
+                    break;
+                }
+            } else {
+                members.extend_from_slice(group_members);
+            }
+        }
+
+        Ok(members)
+    }
+
     pub async fn get_supergroups(&self) -> Result<BTreeMap<i64, Value>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
@@ -264,6 +397,16 @@ impl Client {
         };
 
         Ok(supergroups.clone())
+    }
+
+    pub async fn get_users(&self) -> Result<BTreeMap<i64, Value>> {
+        assert!(matches!(*self.state.read().await, State::Authorized { .. }));
+
+        let State::Authorized { ref users, .. } = *self.state.read().await else {
+            return Ok(Default::default());
+        };
+
+        Ok(users.clone())
     }
 
     async fn load_chats(&self) -> Result<()> {
@@ -308,7 +451,7 @@ impl Client {
         let extra_id = self.id_counter.fetch_add(1, Ordering::SeqCst);
         msg["@extra"] = extra_id.to_string().into();
 
-        tracing::debug!(extra = extra_id, %msg, "Sending request message");
+        tracing::debug!(extra=extra_id, %msg, "Sending request message");
 
         let (resp_tx, resp_rx) = oneshot::channel();
         self.requests
@@ -325,6 +468,8 @@ impl Client {
             .await
             .into_diagnostic()
             .wrap_err_with(|| miette!("No response for request"))?;
+
+        tracing::debug!(extra=extra_id, msg=%resp, "Got response");
 
         Ok(resp)
     }
