@@ -34,6 +34,13 @@ $ asimov-telegram-cataloger
 git clone https://github.com/asimov-modules/asimov-telegram-module.git
 ```
 
+### Resources
+
+- https://core.telegram.org/tdlib/getting-started
+- https://core.telegram.org/tdlib/docs/classtd_1_1td__api_1_1_function.html
+- https://core.telegram.org/tdlib/docs/classtd_1_1td__api_1_1_object.html
+- https://core.telegram.org/tdlib/docs/classes.html
+
 ---
 
 [![Share on X](https://img.shields.io/badge/share%20on-x-03A9F4?logo=x)](https://x.com/intent/post?url=https://github.com/asimov-modules/asimov-telegram-module&text=asimov-telegram-module)
