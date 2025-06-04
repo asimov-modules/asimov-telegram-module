@@ -20,6 +20,10 @@ struct Options {
     #[clap(long, short, value_delimiter = ',')]
     subjects: Vec<String>,
 
+    /// Maximum amount of members per group to fetch.
+    #[clap(long, default_value = "200")]
+    max_members: usize,
+
     #[clap(subcommand)]
     command: Option<Command>,
 }
@@ -173,7 +177,7 @@ async fn main() -> Result<SysexitsError> {
     }
 
     if subjects.contains(&"members".to_string()) {
-        let members = client.get_group_members(Some(200)).await?;
+        let members = client.get_group_members(Some(options.max_members)).await?;
         tracing::debug!(
             len = members.values().map(|ms| ms.len()).sum::<usize>(),
             "Got members"
