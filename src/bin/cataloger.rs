@@ -195,11 +195,12 @@ async fn main() -> Result<SysexitsError> {
             "Got members"
         );
         // TODO: this needs to print the group id too
-        for (_id, group_members) in members {
+        for (id, group_members) in members {
             for member in group_members {
                 match filter.filter_json(member) {
                     // TODO: print as json or RDF?
-                    Ok(v) => println!("{v}"),
+                    Ok(v) => println!("{}", serde_json::json!({"group_id": id, "member": v})),
+                    // Ok(v) => println!("{v}"),
                     Err(jq::JsonFilterError::NoOutput) => (),
                     Err(err) => {
                         tracing::error!(?err);
