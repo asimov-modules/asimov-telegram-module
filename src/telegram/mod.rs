@@ -261,7 +261,7 @@ impl Client {
         Ok(chats.clone())
     }
 
-    pub async fn get_chat_members(&self) -> Result<BTreeMap<i64, Vec<Value>>> {
+    pub async fn get_group_members(&self) -> Result<BTreeMap<i64, Vec<Value>>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
         let mut members: BTreeMap<i64, Vec<Value>> = BTreeMap::new();
@@ -290,7 +290,7 @@ impl Client {
             .filter_map(|(_, val)| {
                 let is_supergroup = val["chat"]["type"]["@type"].as_str()? == "chatTypeSupergroup";
                 let is_channel = val["chat"]["type"]["is_channel"].as_bool()?;
-                let sg_id = val["type"]["supergroup_id"].as_i64()?;
+                let sg_id = val["chat"]["type"]["supergroup_id"].as_i64()?;
 
                 if is_supergroup && !is_channel {
                     Some((sg_id, val))
@@ -301,7 +301,7 @@ impl Client {
             .collect();
 
         for (id, _sg) in supergroups {
-            let group_members = self.get_supergroup_members(id, None).await?;
+            let group_members = self.get_supergroup_members(id, Some(100)).await?;
             members.entry(id).or_default().extend(group_members);
         }
 
