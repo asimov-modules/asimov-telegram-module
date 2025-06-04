@@ -35,6 +35,7 @@ serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 tokio = { version = "1.45", default-features = false, features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 tracing = { version = "0.1.41", default-features = false }
 tracing-subscriber = { version = "0.3.19", default-features = false, features = ["fmt"] }
+futures = "0.3.31"
 
 [profile.release]
 opt-level = "z"
@@ -44,3 +45,7 @@ lto = "thin"
 [[bin]]
 name = "asimov-telegram-cataloger"
 path = "src/bin/cataloger.rs"
+
+[[bin]]
+name = "asimov-telegram-importer"
+path = "src/bin/importer.rs"

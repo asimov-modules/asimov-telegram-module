@@ -15,6 +15,9 @@ pub enum TdLibResponse {
     UpdateNewChat {
         chat: UpdateNewChat,
     },
+    Messages {
+        messages: Messages,
+    },
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
@@ -58,4 +61,27 @@ pub struct UpdateSupergroup {
 
     #[serde(flatten)]
     pub other: BTreeMap<String, Value>,
+}
+
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+pub struct Message {
+    #[serde(rename = "@type")]
+    pub typ: String,
+
+    pub id: i64,
+
+    pub chat_id: i64,
+
+    #[serde(flatten)]
+    pub content: BTreeMap<String, Value>,
+}
+
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+pub struct Messages {
+    #[serde(rename = "@type")]
+    pub typ: String,
+
+    pub total_count: i32,
+
+    pub messages: Vec<Message>,
 }

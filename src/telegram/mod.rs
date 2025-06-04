@@ -15,6 +15,7 @@ use std::{
     },
     vec,
 };
+use std::vec::Vec;
 use tokio::sync::{RwLock, oneshot};
 
 mod messages;
@@ -148,6 +149,9 @@ impl Client {
                             };
                             supergroups.insert(supergroup.id, resp);
                         }
+                        Ok(TdLibResponse::Messages { .. }) => {
+                            // Messages are handled by get_chat_history response
+                        }
                         Err(_) => {
                             // ignore for now
                         }
@@ -264,6 +268,32 @@ impl Client {
         };
 
         Ok(supergroups.clone())
+    }
+
+    async fn get_chat_history(
+        &self,
+        chat_id: i64,
+        from_message_id: i64,
+    ) -> Result<Vec<Message>> {
+        assert!(matches!(*self.state.read().await, State::Authorized { .. }));
+
+        let req = json!({
+            "@type": "getChatHistory",
+            "chat_id": chat_id,
+            "from_message_id": from_message_id,
+            "offset": 0,
+            "limit": "50",
+            "only_local": false
+        });
+
+        let resp = self.request(req).await?;
+        let response = serde_json::from_value::<TdLibResponse>(resp)
+            .map_err(|e| miette!("Failed to parse response: {}", e))?;
+
+        match response {
+            TdLibResponse::Messages { messages } => Ok(messages.messages),
+            _ => Err(miette!("Unexpected response type")),
+        }
     }
 
     async fn load_chats(&self) -> Result<()> {
