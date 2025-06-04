@@ -307,43 +307,36 @@ impl Client {
     ) -> Result<BTreeMap<i64, Vec<Value>>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
+        self.load_chats().await.context("Failed to load chat")?;
+
+        let (basicgroups, supergroups) = {
+            let State::Authorized {
+                ref basicgroups,
+                ref supergroups,
+                ..
+            } = *self.state.read().await
+            else {
+                return Ok(Default::default());
+            };
+            (
+                basicgroups.keys().cloned().collect::<Vec<_>>(),
+                supergroups.keys().cloned().collect::<Vec<_>>(),
+            )
+        };
+
         let mut members: BTreeMap<i64, Vec<Value>> = BTreeMap::new();
 
-        let chats = self.get_chats().await.context("Failed to get chat IDs")?;
-
-        let basicgroups: Vec<(i64, &Value)> = chats
-            .iter()
-            .filter_map(|(id, val)| {
-                let is_basicgroup = val["chat"]["type"]["@type"].as_str()? == "chatTypeBasicGroup";
-                if is_basicgroup {
-                    Some((*id, val))
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        for (id, _g) in basicgroups {
+        for id in basicgroups {
             let group_members = self.get_basicgroup_members(id).await?;
             members.entry(id).or_default().extend(group_members);
         }
 
-        let supergroups: Vec<(i64, &Value)> = chats
-            .iter()
-            .filter_map(|(_, val)| {
-                let is_supergroup = val["chat"]["type"]["@type"].as_str()? == "chatTypeSupergroup";
-                let is_channel = val["chat"]["type"]["is_channel"].as_bool()?;
-                let sg_id = val["chat"]["type"]["supergroup_id"].as_i64()?;
-
-                if is_supergroup && !is_channel {
-                    Some((sg_id, val))
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        for (id, _sg) in supergroups {
+        for id in supergroups {
+            let req = json!({ "@type": "getSupergroupFullInfo", "supergroup_id": id });
+            let resp = self.request(req).await?;
+            if !resp["can_get_members"].as_bool().unwrap_or(false) {
+                continue;
+            }
             let group_members = self.get_supergroup_members(id, max_per_group).await?;
             members.entry(id).or_default().extend(group_members);
         }
