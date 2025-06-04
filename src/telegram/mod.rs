@@ -375,6 +375,11 @@ impl Client {
             let req = json!({ "@type": "getSupergroupMembers", "supergroup_id": supergroup_id, "filter": null, "offset": members.len(), "limit": limit });
             let resp = self.request(req).await?;
 
+            // {"@type":"error","code":400,"message":"Member list is inaccessible","@extra":"1"}
+            if resp["code"].as_i64().is_some_and(|c| c == 400) {
+                break;
+            }
+
             let Some(group_members) = resp["members"].as_array() else {
                 break;
             };
@@ -427,8 +432,7 @@ impl Client {
                 };
 
                 // {"@type":"error","code":404,"message":"Not Found","@extra":"1"}
-                let is_404 = resp["code"].as_i64().is_some_and(|c| c == 404);
-                if is_404 {
+                if resp["code"].as_i64().is_some_and(|c| c == 404) {
                     // All chats have been loaded
                     break;
                 }
