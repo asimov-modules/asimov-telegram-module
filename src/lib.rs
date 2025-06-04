@@ -5,4 +5,5 @@
 #[cfg(feature = "std")]
 extern crate std;
 
+pub mod jq;
 pub mod telegram;

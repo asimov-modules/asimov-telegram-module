@@ -1,6 +1,6 @@
 // This is free and unencumbered software released into the public domain.
 
-use miette::{IntoDiagnostic, Result, WrapErr, miette};
+use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -9,15 +9,14 @@ use std::{
     path::PathBuf,
     ptr::NonNull,
     string::{String, ToString},
-    sync::Arc,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    vec,
     vec::Vec,
 };
-use tokio::sync::{
-    RwLock,
-    mpsc::{self, error::TryRecvError},
-    oneshot,
-};
+use tokio::sync::{RwLock, oneshot};
 
 mod messages;
 use messages::*;
@@ -38,24 +37,14 @@ enum State {
     AwaitingPhoneNumber,
     AwaitingCode,
     Authorized {
-        known_chats: BTreeSet<i64>,
-        chat_data: BTreeMap<i64, ChatData>,
-        supergroup_data: BTreeMap<i64, SupergroupData>,
+        chats: BTreeMap<i64, Value>,
+        basicgroups: BTreeMap<i64, Value>,
+        supergroups: BTreeMap<i64, Value>,
+        users: BTreeMap<i64, Value>,
     },
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ChatData {
-    pub title: Option<String>,
-    pub supergroup: Option<i64>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SupergroupData {
-    pub usernames: BTreeSet<String>,
-}
-
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Config {
     pub api_id: String,
     pub api_hash: String,
@@ -76,14 +65,15 @@ impl Drop for TdHandle {
 }
 
 pub struct Client {
+    config: Config,
     state: Arc<RwLock<State>>,
     handle: Arc<TdHandle>,
-    requests: mpsc::Sender<(u64, oneshot::Sender<Value>)>,
+    requests: flume::Sender<(u64, oneshot::Sender<Value>)>,
     id_counter: AtomicU64,
 }
 
 impl Client {
-    pub fn new() -> Result<Self> {
+    pub fn new(config: Config) -> Result<Self> {
         unsafe { td_set_log_verbosity_level(1) };
         let handle = unsafe { td_json_client_create() };
         let handle = NonNull::new(handle).ok_or_else(|| miette!("Failed to create client"))?;
@@ -91,32 +81,38 @@ impl Client {
 
         let state = Arc::new(RwLock::new(State::default()));
 
-        let (req_tx, req_rx) = mpsc::channel(1);
+        let (req_tx, req_rx) = flume::bounded(0);
 
         let _receiver_handle = tokio::task::spawn_blocking({
             let handle = handle.clone();
             let state = state.clone();
             move || {
-                let mut req_rx = req_rx;
                 let mut pending_reqs: BTreeMap<u64, oneshot::Sender<Value>> = BTreeMap::new();
                 loop {
                     match req_rx.try_recv() {
-                        Err(TryRecvError::Empty) => (),
-                        Err(TryRecvError::Disconnected) => break,
+                        Err(flume::TryRecvError::Empty) => (),
+                        Err(flume::TryRecvError::Disconnected) => break,
                         Ok((id, resp_tx)) => {
                             pending_reqs.insert(id, resp_tx);
                         }
                     }
 
-                    let response_ptr = unsafe { td_json_client_receive(handle.0.as_ptr(), 0.2) };
+                    let response_ptr = unsafe { td_json_client_receive(handle.0.as_ptr(), 0.01) };
                     if response_ptr.is_null() {
                         continue;
                     }
                     let c_str = unsafe { CStr::from_ptr(response_ptr) };
                     let resp = c_str.to_string_lossy().into_owned();
-                    tracing::debug!("Receiver got: {resp}");
+                    tracing::trace!(msg=%resp, "Received message");
 
                     let resp = serde_json::from_str::<Value>(&resp).unwrap();
+
+                    if let Some(id) = resp["@extra"].as_str() {
+                        id.parse()
+                            .ok()
+                            .and_then(|id| pending_reqs.remove(&id))
+                            .and_then(|tx| tx.send(resp.clone()).ok());
+                    }
 
                     match serde_json::from_value(resp.clone()) {
                         Ok(TdLibResponse::UpdateAuthorizationState {
@@ -133,86 +129,46 @@ impl Client {
                             }
                             AuthState::AuthorizationStateReady => {
                                 *state.blocking_write() = State::Authorized {
-                                    known_chats: BTreeSet::default(),
-                                    chat_data: BTreeMap::default(),
-                                    supergroup_data: BTreeMap::default(),
-                                }
+                                    chats: Default::default(),
+                                    basicgroups: Default::default(),
+                                    supergroups: Default::default(),
+                                    users: Default::default(),
+                                };
                             }
                         },
-                        Ok(TdLibResponse::Ok { extra }) => {
-                            extra
-                                .parse()
-                                .ok()
-                                .and_then(|id| pending_reqs.remove(&id))
-                                .and_then(|tx| tx.send(resp).ok());
-                        }
-                        Ok(TdLibResponse::Chats {
-                            extra,
-                            total_count: _,
-                            chat_ids,
-                        }) => {
-                            if let State::Authorized {
-                                ref mut known_chats,
-                                ..
-                            } = *state.blocking_write()
-                            {
-                                known_chats.extend(chat_ids);
-                            }
-                            extra
-                                .parse()
-                                .ok()
-                                .and_then(|id| pending_reqs.remove(&id))
-                                .and_then(|tx| tx.send(resp).ok());
-                        }
                         Ok(TdLibResponse::UpdateNewChat { chat }) => {
-                            let State::Authorized {
-                                ref mut chat_data, ..
-                            } = *state.blocking_write()
+                            let State::Authorized { ref mut chats, .. } = *state.blocking_write()
                             else {
                                 continue;
                             };
-
-                            let entry = chat_data.entry(chat.id).or_default();
-                            entry.title = Some(chat.title);
-                            if let Some(typ) = chat.other.get("type").and_then(Value::as_object) {
-                                if typ
-                                    .get("@type")
-                                    .and_then(Value::as_str)
-                                    .is_some_and(|typ| typ == "chatTypeSupergroup")
-                                {
-                                    if let Some(id) =
-                                        typ.get("supergroup_id").and_then(Value::as_i64)
-                                    {
-                                        entry.supergroup = Some(id)
-                                    }
-                                }
-                            }
+                            chats.insert(chat.id, resp);
                         }
-                        Ok(TdLibResponse::UpdateSuperGroup { supergroup }) => {
+                        Ok(TdLibResponse::UpdateBasicGroup { basicgroup }) => {
                             let State::Authorized {
-                                ref mut supergroup_data,
+                                ref mut basicgroups,
                                 ..
                             } = *state.blocking_write()
                             else {
                                 continue;
                             };
-
-                            let entry = supergroup_data.entry(supergroup.id).or_default();
-
-                            let usernames: Vec<String> = supergroup
-                                .other
-                                .get("usernames")
-                                .and_then(Value::as_object)
-                                .and_then(|o| o.get("active_usernames"))
-                                .and_then(Value::as_array)
-                                .cloned()
-                                .unwrap_or_else(Vec::new)
-                                .iter()
-                                .filter_map(Value::as_str)
-                                .map(String::from)
-                                .collect();
-
-                            entry.usernames.extend(usernames)
+                            basicgroups.insert(basicgroup.id, resp);
+                        }
+                        Ok(TdLibResponse::UpdateSupergroup { supergroup }) => {
+                            let State::Authorized {
+                                ref mut supergroups,
+                                ..
+                            } = *state.blocking_write()
+                            else {
+                                continue;
+                            };
+                            supergroups.insert(supergroup.id, resp);
+                        }
+                        Ok(TdLibResponse::UpdateUser { user }) => {
+                            let State::Authorized { ref mut users, .. } = *state.blocking_write()
+                            else {
+                                continue;
+                            };
+                            users.insert(user.id, resp);
                         }
                         Err(_) => {
                             // ignore for now
@@ -222,6 +178,7 @@ impl Client {
             }
         });
         Ok(Client {
+            config,
             state,
             handle,
             requests: req_tx,
@@ -229,26 +186,24 @@ impl Client {
         })
     }
 
-    pub async fn init(self, config: Config) -> Result<Self> {
+    pub async fn init(self) -> Result<Self> {
         assert_eq!(*self.state.read().await, State::Init);
 
         let req = json!({
             "@type": "setTdlibParameters",
-            "database_directory": config.database_directory,
-            "api_id": config.api_id,
-            "api_hash": config.api_hash,
+            "database_directory": self.config.database_directory,
+            "api_id": self.config.api_id,
+            "api_hash": self.config.api_hash,
 
             "use_test_dc": false,
-            "use_file_database": false,
-            "use_chat_info_database": false,
+            "use_file_database": true,
+            "use_chat_info_database": true,
             "use_message_database": true,
-            "use_secret_chats": true,
+            "use_secret_chats": false,
             "system_language_code": "en",
             "device_model": "Desktop",
             "system_version": "Unknown",
             "application_version": "1.0",
-            "enable_storage_optimizer": true,
-            "ignore_file_names": false
         });
         let resp = self.request(req).await?;
 
@@ -294,68 +249,214 @@ impl Client {
         Ok(())
     }
 
-    pub async fn get_chats(&self) -> Result<BTreeMap<i64, ChatData>> {
+    pub async fn get_chat_ids(&self) -> Result<BTreeSet<i64>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
-        let req = json!({ "@type": "getChats", "chat_list": null, "limit": "50" });
-        let resp = self.request(req).await.context("Failed to get chats")?;
-
-        let _chat_ids = resp
-            .as_object()
-            .and_then(|o| o.get("chat_ids"))
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_else(Vec::new);
-
-        let State::Authorized { ref chat_data, .. } = *self.state.read().await else {
+        let State::Authorized { ref chats, .. } = *self.state.read().await else {
             return Ok(Default::default());
         };
 
-        Ok(chat_data.clone())
+        Ok(chats.iter().map(|(id, _)| *id).collect())
     }
 
-    pub async fn get_supergroups(&self) -> Result<BTreeMap<i64, SupergroupData>> {
+    pub async fn get_chats(&self) -> Result<BTreeMap<i64, Value>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
-        // TODO: Gets stuck when called after `get_chats`?
+        self.load_chats().await.context("Failed to load chats")?;
 
-        // let req = json!({ "@type": "getChats", "chat_list": null, "limit": "50" });
-        // let resp = self
-        //     .request(req)
-        //     .await
-        //     .context("Failed to get supergroups")?;
-        //
-        // let _chat_ids = resp
-        //     .as_object()
-        //     .and_then(|o| o.get("chat_ids"))
-        //     .and_then(Value::as_array)
-        //     .cloned()
-        //     .unwrap_or_else(Vec::new);
+        let State::Authorized { ref chats, .. } = *self.state.read().await else {
+            return Ok(Default::default());
+        };
+
+        Ok(chats.clone())
+    }
+
+    pub async fn get_basicgroups(&self) -> Result<BTreeMap<i64, Value>> {
+        assert!(matches!(*self.state.read().await, State::Authorized { .. }));
+
+        self.load_chats().await.context("Failed to load chats")?;
 
         let State::Authorized {
-            ref supergroup_data,
-            ..
+            ref basicgroups, ..
         } = *self.state.read().await
         else {
             return Ok(Default::default());
         };
 
-        Ok(supergroup_data.clone())
+        Ok(basicgroups.clone())
+    }
+
+    pub async fn get_supergroups(&self) -> Result<BTreeMap<i64, Value>> {
+        assert!(matches!(*self.state.read().await, State::Authorized { .. }));
+
+        self.load_chats().await.context("Failed to load chats")?;
+
+        let State::Authorized {
+            ref supergroups, ..
+        } = *self.state.read().await
+        else {
+            return Ok(Default::default());
+        };
+
+        Ok(supergroups.clone())
+    }
+
+    pub async fn get_group_members(
+        &self,
+        max_per_group: Option<usize>,
+    ) -> Result<BTreeMap<i64, Vec<Value>>> {
+        assert!(matches!(*self.state.read().await, State::Authorized { .. }));
+
+        self.load_chats().await.context("Failed to load chat")?;
+
+        let (basicgroups, supergroups) = {
+            let State::Authorized {
+                ref basicgroups,
+                ref supergroups,
+                ..
+            } = *self.state.read().await
+            else {
+                return Ok(Default::default());
+            };
+            (
+                basicgroups.keys().cloned().collect::<Vec<_>>(),
+                supergroups.keys().cloned().collect::<Vec<_>>(),
+            )
+        };
+
+        let mut members: BTreeMap<i64, Vec<Value>> = BTreeMap::new();
+
+        for id in basicgroups {
+            let group_members = self.get_basicgroup_members(id).await?;
+            members.entry(id).or_default().extend(group_members);
+        }
+
+        for id in supergroups {
+            let req = json!({ "@type": "getSupergroupFullInfo", "supergroup_id": id });
+            let resp = self.request(req).await?;
+            if !resp["can_get_members"].as_bool().unwrap_or(false) {
+                continue;
+            }
+            let group_members = self.get_supergroup_members(id, max_per_group).await?;
+            members.entry(id).or_default().extend(group_members);
+        }
+
+        Ok(members)
+    }
+
+    pub async fn get_basicgroup_members(&self, basicgroup_id: i64) -> Result<Vec<Value>> {
+        let req = json!({ "@type": "getBasicGroupFullInfo", "basic_group_id": basicgroup_id });
+        let resp = self.request(req).await?;
+
+        let group_members = resp["basicGroupFullInfo"]["members"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+
+        Ok(group_members)
+    }
+
+    pub async fn get_supergroup_members(
+        &self,
+        supergroup_id: i64,
+        max_amount: Option<usize>,
+    ) -> Result<Vec<Value>> {
+        let mut members = Vec::new();
+        loop {
+            let limit = if let Some(max) = max_amount {
+                max.saturating_sub(members.len()).min(200)
+            } else {
+                200
+            };
+            if limit == 0 {
+                break;
+            }
+
+            let req = json!({ "@type": "getSupergroupMembers", "supergroup_id": supergroup_id, "filter": null, "offset": members.len(), "limit": limit });
+            let resp = self.request(req).await?;
+
+            // {"@type":"error","code":400,"message":"Member list is inaccessible","@extra":"1"}
+            if resp["code"].as_i64().is_some_and(|c| c == 400) {
+                break;
+            }
+
+            let Some(group_members) = resp["members"].as_array() else {
+                break;
+            };
+
+            if group_members.is_empty() {
+                break;
+            }
+
+            members.extend_from_slice(group_members);
+
+            if resp["total_count"]
+                .as_u64()
+                .is_some_and(|count| members.len() >= count as usize)
+            {
+                break;
+            }
+        }
+
+        Ok(members)
+    }
+
+    pub async fn get_users(&self) -> Result<BTreeMap<i64, Value>> {
+        assert!(matches!(*self.state.read().await, State::Authorized { .. }));
+
+        self.load_chats().await.context("Failed to load chats")?;
+
+        let State::Authorized { ref users, .. } = *self.state.read().await else {
+            return Ok(Default::default());
+        };
+
+        Ok(users.clone())
+    }
+
+    async fn load_chats(&self) -> Result<()> {
+        assert!(matches!(*self.state.read().await, State::Authorized { .. }));
+
+        let chat_lists = vec![
+            json!({"@type": "chatListMain"}),
+            json!({"@type": "chatListArchive"}),
+        ];
+
+        for list in chat_lists {
+            loop {
+                let req = json!({ "@type": "loadChats", "chat_list": list, "limit": "50" });
+
+                let resp = self.request(req).await?;
+                let is_ok = resp["@type"].as_str().is_some_and(|t| t == "ok");
+                if is_ok {
+                    continue;
+                };
+
+                // {"@type":"error","code":404,"message":"Not Found","@extra":"1"}
+                if resp["code"].as_i64().is_some_and(|c| c == 404) {
+                    // All chats have been loaded
+                    break;
+                }
+
+                bail!("Unknown error: {resp}");
+            }
+        }
+
+        Ok(())
     }
 
     async fn request(&self, mut msg: Value) -> Result<Value> {
         let extra_id = self.id_counter.fetch_add(1, Ordering::SeqCst);
         msg["@extra"] = extra_id.to_string().into();
 
+        tracing::debug!(extra=extra_id, %msg, "Sending request message");
+
         let (resp_tx, resp_rx) = oneshot::channel();
         self.requests
-            .send((extra_id, resp_tx))
+            .send_async((extra_id, resp_tx))
             .await
             .map_err(|_| miette!("Failed to send"))?;
 
         let msg = msg.to_string();
-
-        tracing::debug!("Sending msg: id:{extra_id} msg:{msg}");
 
         let c_request = CString::new(msg).unwrap();
         unsafe { td_json_client_send(self.handle.0.as_ptr(), c_request.as_ptr()) };
@@ -365,6 +466,8 @@ impl Client {
             .into_diagnostic()
             .wrap_err_with(|| miette!("No response for request"))?;
 
+        tracing::debug!(extra=extra_id, msg=%resp, "Got response");
+
         Ok(resp)
     }
 }
@@ -373,13 +476,10 @@ fn assert_ok_response(response: Value) -> Result<()> {
     let Some(resp) = response.as_object() else {
         return Err(miette!("Response not a JSON object"));
     };
-    match resp.get("@type").and_then(Value::as_str) {
+    match resp["@type"].as_str() {
         Some("ok") => Ok(()),
         Some("error") => {
-            let msg = resp
-                .get("message")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
+            let msg = resp["message"].as_str().unwrap_or_default();
             Err(miette!("{msg}"))
         }
         Some(_) | None => Err(miette!("Unknown failure")),
@@ -389,6 +489,15 @@ fn assert_ok_response(response: Value) -> Result<()> {
 #[cfg(test)]
 mod test {
     use super::TdLibResponse;
+
+    #[test]
+    fn test_filter() {
+        let s = r#"{"@type":"ok","@extra":"1"}"#;
+        let filter = crate::jq::filter();
+        let res = filter.filter_json_str(s);
+
+        panic!("{res:?}");
+    }
 
     #[test]
     fn test_parse() {
