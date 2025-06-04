@@ -124,18 +124,6 @@ async fn main() -> Result<SysexitsError> {
             }
         }
 
-        // let (id, c) = chats
-        //     .iter()
-        //     .find(|(_, c)| c.to_string().contains("NEAR Chain Abstraction Dev Group"))
-        //     .unwrap();
-        // let sg_id = c["chat"]["type"]["supergroup_id"].as_i64().unwrap();
-        // tracing::debug!(%id, chat=%c, "NEAR Chain Abstraction Dev Group");
-        // let members = client.get_supergroup_members(sg_id, None).await?;
-        // tracing::debug!(len = members.len(), "Got members");
-        // for m in members {
-        //     tracing::debug!(member=%m);
-        // }
-
         // for (id, data) in chats {
         //     let sub = NamedNode::new(format!("http://know.dev/chat/#{}", id)).unwrap();
         //     if let Some(title) = data.title {
@@ -185,7 +173,7 @@ async fn main() -> Result<SysexitsError> {
     }
 
     if subjects.contains(&"members".to_string()) {
-        let members = client.get_group_members().await?;
+        let members = client.get_group_members(Some(200)).await?;
         tracing::debug!(
             len = members.values().map(|ms| ms.len()).sum::<usize>(),
             "Got members"

@@ -184,16 +184,14 @@ impl Client {
             "api_hash": self.config.api_hash,
 
             "use_test_dc": false,
-            "use_file_database": false,
-            "use_chat_info_database": false,
+            "use_file_database": true,
+            "use_chat_info_database": true,
             "use_message_database": true,
-            "use_secret_chats": true,
+            "use_secret_chats": false,
             "system_language_code": "en",
             "device_model": "Desktop",
             "system_version": "Unknown",
             "application_version": "1.0",
-            "enable_storage_optimizer": true,
-            "ignore_file_names": false
         });
         let resp = self.request(req).await?;
 
@@ -276,7 +274,10 @@ impl Client {
         Ok(supergroups.clone())
     }
 
-    pub async fn get_group_members(&self) -> Result<BTreeMap<i64, Vec<Value>>> {
+    pub async fn get_group_members(
+        &self,
+        max_per_group: Option<usize>,
+    ) -> Result<BTreeMap<i64, Vec<Value>>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
         let mut members: BTreeMap<i64, Vec<Value>> = BTreeMap::new();
@@ -316,7 +317,7 @@ impl Client {
             .collect();
 
         for (id, _sg) in supergroups {
-            let group_members = self.get_supergroup_members(id, Some(100)).await?;
+            let group_members = self.get_supergroup_members(id, max_per_group).await?;
             members.entry(id).or_default().extend(group_members);
         }
 
@@ -342,7 +343,16 @@ impl Client {
     ) -> Result<Vec<Value>> {
         let mut members = Vec::new();
         loop {
-            let req = json!({ "@type": "getSupergroupMembers", "supergroup_id": supergroup_id, "offset": members.len(), "limit": 200 });
+            let limit = if let Some(max) = max_amount {
+                max.saturating_sub(members.len()).min(200)
+            } else {
+                200
+            };
+            if limit == 0 {
+                break;
+            }
+
+            let req = json!({ "@type": "getSupergroupMembers", "supergroup_id": supergroup_id, "filter": null, "offset": members.len(), "limit": limit });
             let resp = self.request(req).await?;
 
             let Some(group_members) = resp["members"].as_array() else {
@@ -353,18 +363,13 @@ impl Client {
                 break;
             }
 
-            if let Some(max) = max_amount {
-                let remaining = max.saturating_sub(members.len());
-                if remaining == 0 {
-                    break;
-                }
-                let take_amount = remaining.min(group_members.len());
-                members.extend_from_slice(&group_members[..take_amount]);
-                if members.len() >= max {
-                    break;
-                }
-            } else {
-                members.extend_from_slice(group_members);
+            members.extend_from_slice(group_members);
+
+            if resp["total_count"]
+                .as_u64()
+                .is_some_and(|count| members.len() >= count as usize)
+            {
+                break;
             }
         }
 
