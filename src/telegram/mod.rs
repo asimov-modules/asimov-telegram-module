@@ -106,7 +106,7 @@ impl Client {
 
                     let resp = serde_json::from_str::<Value>(&resp).unwrap();
 
-                    if let Some(id) = resp.get("@extra").and_then(Value::as_str) {
+                    if let Some(id) = resp["@extra"].as_str() {
                         id.parse()
                             .ok()
                             .and_then(|id| pending_reqs.remove(&id))
@@ -271,15 +271,7 @@ impl Client {
         let basicgroups: Vec<(i64, &Value)> = chats
             .iter()
             .filter_map(|(id, val)| {
-                let is_basicgroup = val
-                    .as_object()?
-                    .get("chat")?
-                    .as_object()?
-                    .get("type")?
-                    .as_object()?
-                    .get("@type")?
-                    .as_str()
-                    .is_some_and(|t| t == "chatTypeBasicGroup");
+                let is_basicgroup = val["chat"]["type"]["@type"].as_str()? == "chatTypeBasicGroup";
                 if is_basicgroup {
                     Some((*id, val))
                 } else {
@@ -296,21 +288,9 @@ impl Client {
         let supergroups: Vec<(i64, &Value)> = chats
             .iter()
             .filter_map(|(_, val)| {
-                let c = val
-                    .as_object()
-                    .and_then(|c| c.get("chat"))
-                    .and_then(Value::as_object)?;
-
-                let is_supergroup = c
-                    .get("type")?
-                    .as_object()?
-                    .get("@type")?
-                    .as_str()
-                    .is_some_and(|t| t == "chatTypeSupergroup");
-
-                let is_channel = c.get("type")?.as_object()?.get("is_channel")?.as_bool()?;
-
-                let sg_id = c.get("type")?.as_object()?.get("supergroup_id")?.as_i64()?;
+                let is_supergroup = val["chat"]["type"]["@type"].as_str()? == "chatTypeSupergroup";
+                let is_channel = val["chat"]["type"]["is_channel"].as_bool()?;
+                let sg_id = val["type"]["supergroup_id"].as_i64()?;
 
                 if is_supergroup && !is_channel {
                     Some((sg_id, val))
@@ -332,12 +312,8 @@ impl Client {
         let req = json!({ "@type": "getBasicGroupFullInfo", "basic_group_id": basicgroup_id });
         let resp = self.request(req).await?;
 
-        let group_members = resp
-            .as_object()
-            .and_then(|r| r.get("basicGroupFullInfo"))
-            .and_then(Value::as_object)
-            .and_then(|i| i.get("members"))
-            .and_then(Value::as_array)
+        let group_members = resp["basicGroupFullInfo"]["members"]
+            .as_array()
             .cloned()
             .unwrap_or_default();
 
@@ -354,11 +330,7 @@ impl Client {
             let req = json!({ "@type": "getSupergroupMembers", "supergroup_id": supergroup_id, "offset": members.len(), "limit": 200 });
             let resp = self.request(req).await?;
 
-            let Some(group_members) = resp
-                .as_object()
-                .and_then(|r| r.get("members"))
-                .and_then(Value::as_array)
-            else {
+            let Some(group_members) = resp["members"].as_array() else {
                 break;
             };
 
@@ -422,19 +394,13 @@ impl Client {
                 let req = json!({ "@type": "loadChats", "chat_list": list, "limit": "50" });
 
                 let resp = self.request(req).await?;
-                let is_ok = resp
-                    .get("@type")
-                    .and_then(Value::as_str)
-                    .is_some_and(|t| t == "ok");
+                let is_ok = resp["@type"].as_str().is_some_and(|t| t == "ok");
                 if is_ok {
                     continue;
                 };
 
                 // {"@type":"error","code":404,"message":"Not Found","@extra":"1"}
-                let is_404 = resp
-                    .get("code")
-                    .and_then(Value::as_i64)
-                    .is_some_and(|c| c == 404);
+                let is_404 = resp["code"].as_i64().is_some_and(|c| c == 404);
                 if is_404 {
                     // All chats have been loaded
                     break;
@@ -479,13 +445,10 @@ fn assert_ok_response(response: Value) -> Result<()> {
     let Some(resp) = response.as_object() else {
         return Err(miette!("Response not a JSON object"));
     };
-    match resp.get("@type").and_then(Value::as_str) {
+    match resp["@type"].as_str() {
         Some("ok") => Ok(()),
         Some("error") => {
-            let msg = resp
-                .get("message")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
+            let msg = resp["message"].as_str().unwrap_or_default();
             Err(miette!("{msg}"))
         }
         Some(_) | None => Err(miette!("Unknown failure")),
