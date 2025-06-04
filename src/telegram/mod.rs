@@ -96,7 +96,7 @@ impl Client {
                         }
                     }
 
-                    let response_ptr = unsafe { td_json_client_receive(handle.0.as_ptr(), 0.2) };
+                    let response_ptr = unsafe { td_json_client_receive(handle.0.as_ptr(), 0.01) };
                     if response_ptr.is_null() {
                         continue;
                     }
