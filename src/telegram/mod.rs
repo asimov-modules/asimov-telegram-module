@@ -38,6 +38,7 @@ enum State {
     AwaitingCode,
     Authorized {
         chats: BTreeMap<i64, Value>,
+        basicgroups: BTreeMap<i64, Value>,
         supergroups: BTreeMap<i64, Value>,
         users: BTreeMap<i64, Value>,
     },
@@ -129,6 +130,7 @@ impl Client {
                             AuthState::AuthorizationStateReady => {
                                 *state.blocking_write() = State::Authorized {
                                     chats: Default::default(),
+                                    basicgroups: Default::default(),
                                     supergroups: Default::default(),
                                     users: Default::default(),
                                 };
@@ -141,7 +143,17 @@ impl Client {
                             };
                             chats.insert(chat.id, resp);
                         }
-                        Ok(TdLibResponse::UpdateSuperGroup { supergroup }) => {
+                        Ok(TdLibResponse::UpdateBasicGroup { basicgroup }) => {
+                            let State::Authorized {
+                                ref mut basicgroups,
+                                ..
+                            } = *state.blocking_write()
+                            else {
+                                continue;
+                            };
+                            basicgroups.insert(basicgroup.id, resp);
+                        }
+                        Ok(TdLibResponse::UpdateSupergroup { supergroup }) => {
                             let State::Authorized {
                                 ref mut supergroups,
                                 ..
@@ -259,7 +271,22 @@ impl Client {
         Ok(chats.clone())
     }
 
-    pub async fn get_groups(&self) -> Result<BTreeMap<i64, Value>> {
+    pub async fn get_basicgroups(&self) -> Result<BTreeMap<i64, Value>> {
+        assert!(matches!(*self.state.read().await, State::Authorized { .. }));
+
+        self.load_chats().await.context("Failed to load chats")?;
+
+        let State::Authorized {
+            ref basicgroups, ..
+        } = *self.state.read().await
+        else {
+            return Ok(Default::default());
+        };
+
+        Ok(basicgroups.clone())
+    }
+
+    pub async fn get_supergroups(&self) -> Result<BTreeMap<i64, Value>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
         self.load_chats().await.context("Failed to load chats")?;

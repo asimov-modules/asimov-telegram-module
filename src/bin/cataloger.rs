@@ -151,7 +151,19 @@ async fn main() -> Result<SysexitsError> {
     }
 
     if subjects.contains(&"groups".to_string()) {
-        let supergroups = client.get_groups().await?;
+        let basicgroups = client.get_basicgroups().await?;
+        for (_id, basicgroup) in basicgroups {
+            match filter.filter_json(basicgroup) {
+                // TODO: print as json or RDF?
+                Ok(v) => println!("{v}"),
+                Err(jq::JsonFilterError::NoOutput) => (),
+                Err(err) => {
+                    tracing::error!(?err);
+                }
+            }
+        }
+
+        let supergroups = client.get_supergroups().await?;
         for (_id, supergroup) in supergroups {
             match filter.filter_json(supergroup) {
                 // TODO: print as json or RDF?

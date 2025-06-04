@@ -12,7 +12,13 @@ pub enum TdLibResponse {
     UpdateNewChat {
         chat: UpdateNewChat,
     },
-    UpdateSuperGroup {
+    #[serde[rename = "updateBasicGroup"]]
+    UpdateBasicGroup {
+        #[serde(rename = "basic_group")]
+        basicgroup: UpdateBasicgroup,
+    },
+    #[serde[rename = "updateSupergroup"]] // note lowercase `g` in comparison to basicgroup
+    UpdateSupergroup {
         supergroup: UpdateSupergroup,
     },
     UpdateUser {
@@ -41,6 +47,14 @@ pub enum AuthState {
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct UpdateNewChat {
+    pub id: i64,
+
+    #[serde(flatten)]
+    pub other: BTreeMap<String, Value>,
+}
+
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+pub struct UpdateBasicgroup {
     pub id: i64,
 
     #[serde(flatten)]
