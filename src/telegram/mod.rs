@@ -261,6 +261,21 @@ impl Client {
         Ok(chats.clone())
     }
 
+    pub async fn get_groups(&self) -> Result<BTreeMap<i64, Value>> {
+        assert!(matches!(*self.state.read().await, State::Authorized { .. }));
+
+        self.load_chats().await.context("Failed to load chats")?;
+
+        let State::Authorized {
+            ref supergroups, ..
+        } = *self.state.read().await
+        else {
+            return Ok(Default::default());
+        };
+
+        Ok(supergroups.clone())
+    }
+
     pub async fn get_group_members(&self) -> Result<BTreeMap<i64, Vec<Value>>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
@@ -356,23 +371,10 @@ impl Client {
         Ok(members)
     }
 
-    pub async fn get_supergroups(&self) -> Result<BTreeMap<i64, Value>> {
+    pub async fn get_users(&self) -> Result<BTreeMap<i64, Value>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
         self.load_chats().await.context("Failed to load chats")?;
-
-        let State::Authorized {
-            ref supergroups, ..
-        } = *self.state.read().await
-        else {
-            return Ok(Default::default());
-        };
-
-        Ok(supergroups.clone())
-    }
-
-    pub async fn get_users(&self) -> Result<BTreeMap<i64, Value>> {
-        assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
         let State::Authorized { ref users, .. } = *self.state.read().await else {
             return Ok(Default::default());

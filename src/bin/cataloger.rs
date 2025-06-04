@@ -97,9 +97,20 @@ async fn main() -> Result<SysexitsError> {
     //     .unwrap()
     //     .for_writer(std::io::stdout());
 
+    let subjects = if !options.subjects.is_empty() {
+        options.subjects
+    } else {
+        vec![
+            "chats".into(),
+            "groups".into(),
+            "members".into(),
+            "users".into(),
+        ]
+    };
+
     let filter = asimov_telegram_module::jq::filter();
 
-    if options.subjects.contains(&"chats".to_string()) {
+    if subjects.contains(&"chats".to_string()) {
         let chats = client.get_chats().await?;
 
         for (_id, chat) in chats {
@@ -147,8 +158,8 @@ async fn main() -> Result<SysexitsError> {
         //
     }
 
-    if options.subjects.contains(&"supergroups".to_string()) {
-        let supergroups = client.get_supergroups().await?;
+    if subjects.contains(&"groups".to_string()) {
+        let supergroups = client.get_groups().await?;
         for (_id, supergroup) in supergroups {
             match filter.filter_json(supergroup) {
                 // TODO: print as json or RDF?
@@ -173,7 +184,7 @@ async fn main() -> Result<SysexitsError> {
         // }
     }
 
-    if options.subjects.contains(&"members".to_string()) {
+    if subjects.contains(&"members".to_string()) {
         let members = client.get_group_members().await?;
         tracing::debug!(
             len = members.values().map(|ms| ms.len()).sum::<usize>(),
@@ -197,7 +208,7 @@ async fn main() -> Result<SysexitsError> {
         }
     }
 
-    if options.subjects.contains(&"users".to_string()) {
+    if subjects.contains(&"users".to_string()) {
         let users = client.get_users().await?;
         tracing::debug!(len = users.len(), "Got users");
         for (_id, user) in users {
