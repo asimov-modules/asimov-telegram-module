@@ -1,39 +1,31 @@
 // This is free and unencumbered software released into the public domain.
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    ffi::{CStr, CString, c_char, c_int, c_void},
     format,
     path::PathBuf,
-    ptr::NonNull,
     string::{String, ToString},
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::Arc,
     vec,
     vec::Vec,
 };
-use tokio::sync::{RwLock, oneshot};
+use tokio::sync::RwLock;
 
-mod messages;
-use messages::*;
-
+// Have to do this manually. If you use tdlib-rs's provided
+// `tdlib_rs::functions::set_log_verbosity_level` you *will* get output on stdout because that one
+// is called *after* the client is created (and hence it gets a chance to start logging...).
+// So, to get absolutely no output from TdLib we link and call this:
+#[link(name = "tdjson")]
 unsafe extern "C" {
-    fn td_json_client_create() -> *mut c_void;
-    fn td_json_client_send(client: *mut c_void, request: *const c_char);
-    fn td_json_client_receive(client: *mut c_void, timeout: f64) -> *const c_char;
-    fn td_json_client_destroy(client: *mut c_void);
-    fn td_set_log_verbosity_level(new_verbosity_level: c_int);
+    fn td_set_log_verbosity_level(new_verbosity_level: std::ffi::c_int);
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 enum State {
     #[default]
     Init,
-    AwaitingAuthorization,
     AwaitingPhoneNumber,
     AwaitingCode,
     Authorized {
@@ -51,7 +43,7 @@ pub struct Config {
     pub database_directory: PathBuf,
 }
 
-struct TdHandle(NonNull<c_void>);
+struct TdHandle(i32);
 
 // I *think* this is ok? If not will just have to start a second worker thread
 // that does all the `td_json_client_send`.
@@ -60,7 +52,12 @@ unsafe impl Sync for TdHandle {}
 
 impl Drop for TdHandle {
     fn drop(&mut self) {
-        unsafe { td_json_client_destroy(self.0.as_ptr()) }
+        tracing::debug!("Closing TdLib handle");
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(tdlib_rs::functions::close(self.0))
+                .unwrap();
+        });
     }
 }
 
@@ -68,92 +65,66 @@ pub struct Client {
     config: Config,
     state: Arc<RwLock<State>>,
     handle: Arc<TdHandle>,
-    requests: flume::Sender<(u64, oneshot::Sender<Value>)>,
-    id_counter: AtomicU64,
 }
 
 impl Client {
     pub fn new(config: Config) -> Result<Self> {
-        unsafe { td_set_log_verbosity_level(1) };
-        let handle = unsafe { td_json_client_create() };
-        let handle = NonNull::new(handle).ok_or_else(|| miette!("Failed to create client"))?;
+        unsafe { td_set_log_verbosity_level(0) };
+
+        let handle = tdlib_rs::create_client();
         let handle = Arc::new(TdHandle(handle));
 
         let state = Arc::new(RwLock::new(State::default()));
 
-        let (req_tx, req_rx) = flume::bounded(0);
-
         let _receiver_handle = tokio::task::spawn_blocking({
-            let handle = handle.clone();
             let state = state.clone();
+            let _handle = handle.clone();
+
             move || {
-                let mut pending_reqs: BTreeMap<u64, oneshot::Sender<Value>> = BTreeMap::new();
                 loop {
-                    match req_rx.try_recv() {
-                        Err(flume::TryRecvError::Empty) => (),
-                        Err(flume::TryRecvError::Disconnected) => break,
-                        Ok((id, resp_tx)) => {
-                            pending_reqs.insert(id, resp_tx);
-                        }
-                    }
-
-                    let response_ptr = unsafe { td_json_client_receive(handle.0.as_ptr(), 0.01) };
-                    if response_ptr.is_null() {
+                    let Some((update, _client_id)) = tdlib_rs::receive() else {
                         continue;
-                    }
-                    let c_str = unsafe { CStr::from_ptr(response_ptr) };
-                    let resp = c_str.to_string_lossy().into_owned();
-                    tracing::trace!(msg=%resp, "Received message");
+                    };
 
-                    let resp = serde_json::from_str::<Value>(&resp).unwrap();
+                    use tdlib_rs::enums::Update::*;
 
-                    if let Some(id) = resp["@extra"].as_str() {
-                        id.parse()
-                            .ok()
-                            .and_then(|id| pending_reqs.remove(&id))
-                            .and_then(|tx| tx.send(resp.clone()).ok());
-                    }
+                    match update {
+                        Option(_) => (),
+                        _ => tracing::debug!(?update),
+                    };
 
-                    match serde_json::from_value(resp.clone()) {
-                        Ok(TdLibResponse::UpdateAuthorizationState {
-                            authorization_state,
-                        }) => match authorization_state.typ {
-                            AuthState::AuthorizationStateWaitTdlibParameters => {
-                                *state.blocking_write() = State::AwaitingAuthorization
-                            }
-                            AuthState::AuthorizationStateWaitPhoneNumber => {
-                                *state.blocking_write() = State::AwaitingPhoneNumber
-                            }
-                            AuthState::AuthorizationStateWaitCode => {
-                                *state.blocking_write() = State::AwaitingCode
-                            }
-                            AuthState::AuthorizationStateReady => {
+                    use tdlib_rs::enums::AuthorizationState::*;
+                    match update {
+                        AuthorizationState(st) => match st.authorization_state {
+                            WaitTdlibParameters => *state.blocking_write() = State::Init,
+                            WaitPhoneNumber => *state.blocking_write() = State::AwaitingPhoneNumber,
+                            WaitCode(_) => *state.blocking_write() = State::AwaitingCode,
+                            Ready => {
                                 *state.blocking_write() = State::Authorized {
-                                    chats: Default::default(),
-                                    basicgroups: Default::default(),
-                                    supergroups: Default::default(),
-                                    users: Default::default(),
-                                };
+                                    chats: BTreeMap::new(),
+                                    basicgroups: BTreeMap::new(),
+                                    supergroups: BTreeMap::new(),
+                                    users: BTreeMap::new(),
+                                }
                             }
+                            Closed => break,
+                            WaitEmailAddress(_)
+                            | WaitEmailCode(_)
+                            | WaitOtherDeviceConfirmation(_)
+                            | WaitRegistration(_)
+                            | WaitPassword(_)
+                            | LoggingOut
+                            | Closing => (), // ignore
                         },
-                        Ok(TdLibResponse::UpdateNewChat { chat }) => {
+                        NewChat(chat) => {
                             let State::Authorized { ref mut chats, .. } = *state.blocking_write()
                             else {
                                 continue;
                             };
-                            chats.insert(chat.id, resp);
+
+                            chats.insert(chat.chat.id, serde_json::to_value(chat.chat).unwrap());
                         }
-                        Ok(TdLibResponse::UpdateBasicGroup { basicgroup }) => {
-                            let State::Authorized {
-                                ref mut basicgroups,
-                                ..
-                            } = *state.blocking_write()
-                            else {
-                                continue;
-                            };
-                            basicgroups.insert(basicgroup.id, resp);
-                        }
-                        Ok(TdLibResponse::UpdateSupergroup { supergroup }) => {
+                        Supergroup(supergroup) => {
                             let State::Authorized {
                                 ref mut supergroups,
                                 ..
@@ -161,18 +132,35 @@ impl Client {
                             else {
                                 continue;
                             };
-                            supergroups.insert(supergroup.id, resp);
+
+                            supergroups.insert(
+                                supergroup.supergroup.id,
+                                serde_json::to_value(supergroup.supergroup).unwrap(),
+                            );
                         }
-                        Ok(TdLibResponse::UpdateUser { user }) => {
+                        BasicGroup(basicgroup) => {
+                            let State::Authorized {
+                                ref mut basicgroups,
+                                ..
+                            } = *state.blocking_write()
+                            else {
+                                continue;
+                            };
+
+                            basicgroups.insert(
+                                basicgroup.basic_group.id,
+                                serde_json::to_value(basicgroup.basic_group).unwrap(),
+                            );
+                        }
+                        User(user) => {
                             let State::Authorized { ref mut users, .. } = *state.blocking_write()
                             else {
                                 continue;
                             };
-                            users.insert(user.id, resp);
+
+                            users.insert(user.user.id, serde_json::to_value(user.user).unwrap());
                         }
-                        Err(_) => {
-                            // ignore for now
-                        }
+                        _ => (), // ignore
                     }
                 }
             }
@@ -181,33 +169,35 @@ impl Client {
             config,
             state,
             handle,
-            requests: req_tx,
-            id_counter: AtomicU64::new(1),
         })
     }
 
-    pub async fn init(self) -> Result<Self> {
+    pub async fn init(&self) -> Result<()> {
         assert_eq!(*self.state.read().await, State::Init);
 
-        let req = json!({
-            "@type": "setTdlibParameters",
-            "database_directory": self.config.database_directory,
-            "api_id": self.config.api_id,
-            "api_hash": self.config.api_hash,
+        tracing::debug!(target: "set_tdlib_parameters", database_directory=%self.config.database_directory.to_string_lossy(), "initializing");
 
-            "use_test_dc": false,
-            "use_file_database": true,
-            "use_chat_info_database": true,
-            "use_message_database": true,
-            "use_secret_chats": false,
-            "system_language_code": "en",
-            "device_model": "Desktop",
-            "system_version": "Unknown",
-            "application_version": "1.0",
-        });
-        let resp = self.request(req).await?;
+        tdlib_rs::functions::set_tdlib_parameters(
+            false,
+            self.config.database_directory.to_string_lossy().to_string() + "/",
+            "".into(),
+            "".into(), // TODO: create, save, and fetch a key securely (i.e. to keychain on macos)
+            true,
+            true,
+            true,
+            false,
+            self.config.api_id.parse().unwrap(),
+            self.config.api_hash.clone(),
+            "en".into(),
+            "Desktop".into(),
+            "".into(),
+            "1.0".into(),
+            self.handle.0,
+        )
+        .await
+        .map_err(|e| miette!("TdLib client initialization failed: {}", e.message))?;
 
-        assert_ok_response(resp).context("TdLib client initialization failed")?;
+        tracing::debug!(target: "set_tdlib_parameters", "initialized");
 
         for _ in 0..10 {
             match *self.state.read().await {
@@ -218,7 +208,7 @@ impl Client {
             }
         }
 
-        Ok(self)
+        Ok(())
     }
 
     pub async fn is_authorised(&self) -> bool {
@@ -232,25 +222,27 @@ impl Client {
     pub async fn send_auth_request(&self, phone_number: &str) -> Result<()> {
         assert_eq!(*self.state.read().await, State::AwaitingPhoneNumber);
 
-        let req = json!({ "@type": "setAuthenticationPhoneNumber", "phone_number": phone_number });
-        let resp = self.request(req).await?;
-        assert_ok_response(resp).context("Failed to request authentication code")?;
-
-        Ok(())
+        tdlib_rs::functions::set_authentication_phone_number(
+            phone_number.into(),
+            None,
+            self.handle.0,
+        )
+        .await
+        .map_err(|e| miette!("Failed to request authentication code: {}", e.message))
     }
 
     pub async fn send_auth_code(&self, code: &str) -> Result<()> {
         assert_eq!(*self.state.read().await, State::AwaitingCode);
 
-        let req = json!({ "@type": "checkAuthenticationCode", "code": code });
-        let resp = self.request(req).await?;
-        assert_ok_response(resp).context("Failed to confirm authentication code")?;
-
-        Ok(())
+        tdlib_rs::functions::check_authentication_code(code.into(), self.handle.0)
+            .await
+            .map_err(|e| miette!("Failed to confirm authentication code: {}", e.message))
     }
 
     pub async fn get_chat_ids(&self) -> Result<BTreeSet<i64>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
+
+        self.load_chats().await.context("Failed to load chats")?;
 
         let State::Authorized { ref chats, .. } = *self.state.read().await else {
             return Ok(Default::default());
@@ -263,6 +255,8 @@ impl Client {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
         self.load_chats().await.context("Failed to load chats")?;
+
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
         let State::Authorized { ref chats, .. } = *self.state.read().await else {
             return Ok(Default::default());
@@ -332,11 +326,15 @@ impl Client {
         }
 
         for id in supergroups {
-            let req = json!({ "@type": "getSupergroupFullInfo", "supergroup_id": id });
-            let resp = self.request(req).await?;
-            if !resp["can_get_members"].as_bool().unwrap_or(false) {
+            let tdlib_rs::enums::SupergroupFullInfo::SupergroupFullInfo(info) =
+                tdlib_rs::functions::get_supergroup_full_info(id, self.handle.0)
+                    .await
+                    .map_err(|e| miette!(e.message))?;
+
+            if !info.can_get_members {
                 continue;
-            }
+            };
+
             let group_members = self.get_supergroup_members(id, max_per_group).await?;
             members.entry(id).or_default().extend(group_members);
         }
@@ -345,15 +343,13 @@ impl Client {
     }
 
     pub async fn get_basicgroup_members(&self, basicgroup_id: i64) -> Result<Vec<Value>> {
-        let req = json!({ "@type": "getBasicGroupFullInfo", "basic_group_id": basicgroup_id });
-        let resp = self.request(req).await?;
-
-        let group_members = resp["basicGroupFullInfo"]["members"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
-
-        Ok(group_members)
+        tdlib_rs::functions::get_basic_group_full_info(basicgroup_id, self.handle.0)
+            .await
+            .map_err(|e| miette!(e.message))
+            .into_iter()
+            .flat_map(|tdlib_rs::enums::BasicGroupFullInfo::BasicGroupFullInfo(info)| info.members)
+            .map(|x| serde_json::to_value(x).into_diagnostic())
+            .collect::<Result<Vec<_>>>()
     }
 
     pub async fn get_supergroup_members(
@@ -361,10 +357,10 @@ impl Client {
         supergroup_id: i64,
         max_amount: Option<usize>,
     ) -> Result<Vec<Value>> {
-        let mut members = Vec::new();
+        let mut group_members = Vec::new();
         loop {
             let limit = if let Some(max) = max_amount {
-                max.saturating_sub(members.len()).min(200)
+                max.saturating_sub(group_members.len()).min(200)
             } else {
                 200
             };
@@ -372,33 +368,34 @@ impl Client {
                 break;
             }
 
-            let req = json!({ "@type": "getSupergroupMembers", "supergroup_id": supergroup_id, "filter": null, "offset": members.len(), "limit": limit });
-            let resp = self.request(req).await?;
+            let res = tdlib_rs::functions::get_supergroup_members(
+                supergroup_id,
+                None,
+                group_members.len() as i32,
+                limit as i32,
+                self.handle.0,
+            )
+            .await;
 
-            // {"@type":"error","code":400,"message":"Member list is inaccessible","@extra":"1"}
-            if resp["code"].as_i64().is_some_and(|c| c == 400) {
-                break;
-            }
-
-            let Some(group_members) = resp["members"].as_array() else {
-                break;
-            };
-
-            if group_members.is_empty() {
-                break;
-            }
-
-            members.extend_from_slice(group_members);
-
-            if resp["total_count"]
-                .as_u64()
-                .is_some_and(|count| members.len() >= count as usize)
-            {
-                break;
+            match res {
+                Ok(tdlib_rs::enums::ChatMembers::ChatMembers(members)) => {
+                    group_members.extend(
+                        members
+                            .members
+                            .iter()
+                            .filter_map(|m| serde_json::to_value(m.clone()).ok()),
+                    );
+                    if group_members.len() >= members.total_count as usize {
+                        break;
+                    }
+                }
+                // {"@type":"error","code":400,"message":"Member list is inaccessible","@extra":"1"}
+                Err(err) if err.code == 400 => break,
+                Err(err) => bail!(err.message),
             }
         }
 
-        Ok(members)
+        Ok(group_members)
     }
 
     pub async fn get_users(&self) -> Result<BTreeMap<i64, Value>> {
@@ -417,94 +414,21 @@ impl Client {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
         let chat_lists = vec![
-            json!({"@type": "chatListMain"}),
-            json!({"@type": "chatListArchive"}),
+            tdlib_rs::enums::ChatList::Main,
+            tdlib_rs::enums::ChatList::Archive,
         ];
 
         for list in chat_lists {
             loop {
-                let req = json!({ "@type": "loadChats", "chat_list": list, "limit": "50" });
-
-                let resp = self.request(req).await?;
-                let is_ok = resp["@type"].as_str().is_some_and(|t| t == "ok");
-                if is_ok {
-                    continue;
-                };
-
-                // {"@type":"error","code":404,"message":"Not Found","@extra":"1"}
-                if resp["code"].as_i64().is_some_and(|c| c == 404) {
-                    // All chats have been loaded
-                    break;
+                match tdlib_rs::functions::load_chats(Some(list.clone()), 100, self.handle.0).await
+                {
+                    Ok(_) => (),
+                    Err(err) if err.code == 404 => break,
+                    Err(err) => bail!(err.message),
                 }
-
-                bail!("Unknown error: {resp}");
             }
         }
 
         Ok(())
-    }
-
-    async fn request(&self, mut msg: Value) -> Result<Value> {
-        let extra_id = self.id_counter.fetch_add(1, Ordering::SeqCst);
-        msg["@extra"] = extra_id.to_string().into();
-
-        tracing::debug!(extra=extra_id, %msg, "Sending request message");
-
-        let (resp_tx, resp_rx) = oneshot::channel();
-        self.requests
-            .send_async((extra_id, resp_tx))
-            .await
-            .map_err(|_| miette!("Failed to send"))?;
-
-        let msg = msg.to_string();
-
-        let c_request = CString::new(msg).unwrap();
-        unsafe { td_json_client_send(self.handle.0.as_ptr(), c_request.as_ptr()) };
-
-        let resp = resp_rx
-            .await
-            .into_diagnostic()
-            .wrap_err_with(|| miette!("No response for request"))?;
-
-        tracing::debug!(extra=extra_id, msg=%resp, "Got response");
-
-        Ok(resp)
-    }
-}
-
-fn assert_ok_response(response: Value) -> Result<()> {
-    let Some(resp) = response.as_object() else {
-        return Err(miette!("Response not a JSON object"));
-    };
-    match resp["@type"].as_str() {
-        Some("ok") => Ok(()),
-        Some("error") => {
-            let msg = resp["message"].as_str().unwrap_or_default();
-            Err(miette!("{msg}"))
-        }
-        Some(_) | None => Err(miette!("Unknown failure")),
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::TdLibResponse;
-
-    #[test]
-    fn test_filter() {
-        let s = r#"{"@type":"ok","@extra":"1"}"#;
-        let filter = crate::jq::filter();
-        let res = filter.filter_json_str(s);
-
-        panic!("{res:?}");
-    }
-
-    #[test]
-    fn test_parse() {
-        let s = r#"{"@type":"ok","@extra":"1"}"#;
-        serde_json::from_str::<TdLibResponse>(s).unwrap();
-
-        let s = r#"{"@type":"updateAuthorizationState","authorization_state":{"@type":"authorizationStateWaitTdlibParameters"}}"#;
-        serde_json::from_str::<TdLibResponse>(s).unwrap();
     }
 }

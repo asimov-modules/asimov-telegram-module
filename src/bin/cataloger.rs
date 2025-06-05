@@ -68,7 +68,9 @@ async fn main() -> Result<SysexitsError> {
         api_id: std::env::var("API_ID").expect("API_ID must be set"),
         api_hash: std::env::var("API_HASH").expect("API_HASH must be set"),
     };
-    let client = Client::new(config).unwrap().init().await.unwrap();
+
+    let client = Client::new(config).unwrap();
+    client.init().await.unwrap();
 
     match options.command {
         Some(Command::SendCode { phone }) => {
