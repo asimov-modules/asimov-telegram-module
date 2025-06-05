@@ -436,8 +436,8 @@ impl Client {
         limit: i32,
     ) -> Result<Vec<Value>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
-        if limit < 1 || limit > 50 { // Reduced max limit to mitigate TDLib load
-            bail!("Limit must be between 1 and 50");
+        if limit < 1 || limit > 50 {
+            bail!("Limit must be between 1 and 10");
         }
 
         let state = self.state.read().await;
@@ -449,8 +449,10 @@ impl Client {
 
         tracing::debug!(chat_id, from_message_id, limit, "Fetching chat history");
 
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
         let res = tokio::time::timeout(
-            std::time::Duration::from_secs(30), // Increased timeout
+            std::time::Duration::from_secs(60),
             tdlib_rs::functions::get_chat_history(
                 chat_id,
                 from_message_id,
@@ -461,11 +463,10 @@ impl Client {
             ),
         )
             .await
-            .map_err(|_| miette!("Request timed out after 30 seconds"))?
-            .map_err(|e| miette!("Failed to get chat history: {}", e.message))?;
+            .map_err(|_| miette!("Request timed out after 60 seconds for chat_id: {}", chat_id))?;
 
         let messages = match res {
-            tdlib_rs::enums::Messages::Messages(messages) => messages
+            Ok(tdlib_rs::enums::Messages::Messages(messages)) => messages
                 .messages
                 .into_iter()
                 .filter_map(|msg| {
@@ -475,6 +476,7 @@ impl Client {
                     }).ok()
                 })
                 .collect::<Vec<Value>>(),
+            Err(e) => bail!("Failed to get chat history: {}", e.message),
         };
 
         tracing::debug!(chat_id, message_count=messages.len(), "Received chat history");
@@ -492,49 +494,64 @@ impl Client {
                     ids.into_iter().collect::<Vec<i64>>()
                 }
                 Err(e) => {
-                    tracing::error!(error=%e, "Failed to get chat IDs, streaming no messages");
+                    tracing::error!(error=%e, "Failed to get chat IDs");
                     vec![]
                 }
             };
-            tracing::debug!(chat_ids=?chat_ids, "Chat IDs to process");
+            tracing::debug!(chat_ids=chat_ids.len(), "Chat IDs to process");
 
             for chat_id in chat_ids {
                 tracing::info!(chat_id, "Processing chat");
                 let mut from_msg_id = 0;
                 let mut prev_msg_id = 0;
                 let mut attempts = 0;
-                const MAX_ATTEMPTS: i32 = 3; // Limit retries to prevent infinite loops
+                const MAX_ATTEMPTS: usize = 3;
 
                 loop {
-                    let messages = match tokio::time::timeout(
+                    let result = tokio::time::timeout(
                         std::time::Duration::from_secs(60),
-                        self.get_chat_history(chat_id, from_msg_id, 50) // Reduced batch size
+                        self.get_chat_history(chat_id, from_msg_id, 10),
                     )
-                    .await {
+                    .await;
+
+                    let messages = match result {
                         Ok(Ok(msgs)) => {
-                            attempts = 0; // Reset on success
+                            attempts = 0;
                             msgs
-                        }
+                        },
                         Ok(Err(e)) => {
-                            tracing::warn!(%chat_id, error=%e, attempts, "Error fetching chat history");
                             attempts += 1;
+                            let backoff = std::time::Duration::from_secs(2u64.pow(attempts as u32));
+                            tracing::warn!(
+                                %chat_id,
+                                error=%e,
+                                attempts,
+                                backoff_ms=backoff.as_millis(),
+                                "Error fetching messages, retrying after backoff"
+                            );
                             if attempts >= MAX_ATTEMPTS {
                                 tracing::warn!(%chat_id, "Max attempts reached, skipping chat");
                                 break;
                             }
-                            tokio::time::sleep(std::time::Duration::from_secs(1)).await; // Backoff
+                            tokio::time::sleep(backoff).await;
                             continue;
-                        }
+                        },
                         Err(_) => {
-                            tracing::warn!(%chat_id, attempts, "Timeout fetching chat history");
                             attempts += 1;
+                            let backoff = std::time::Duration::from_secs(2u64.pow(attempts as u32));
+                            tracing::warn!(
+                                %chat_id,
+                                attempts,
+                                backoff_ms=backoff.as_millis(),
+                                "Timeout fetching messages, retrying after backoff"
+                            );
                             if attempts >= MAX_ATTEMPTS {
                                 tracing::warn!(%chat_id, "Max attempts reached, skipping chat");
                                 break;
                             }
-                            tokio::time::sleep(std::time::Duration::from_secs(1)).await; // Backoff
+                            tokio::time::sleep(backoff).await;
                             continue;
-                        }
+                        },
                     };
 
                     tracing::debug!(chat_id, message_count=messages.len(), "Received messages");
@@ -561,7 +578,6 @@ impl Client {
 
                     prev_msg_id = from_msg_id;
                     from_msg_id = last_msg_id;
-                    attempts = 0; // Reset attempts after successful fetch
                 }
             }
         }
