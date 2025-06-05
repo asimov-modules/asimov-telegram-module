@@ -78,7 +78,6 @@ impl Client {
 
         let _receiver_handle = tokio::task::spawn_blocking({
             let state = state.clone();
-            let _handle = handle.clone();
 
             move || {
                 loop {
