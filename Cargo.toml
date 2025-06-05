@@ -19,7 +19,14 @@ publish = true
 [features]
 default = ["all", "std"]
 all = []
-std = ["asimov-module/std", "clientele/std", "serde/std", "serde_json/std", "tracing/std", "tracing-subscriber/std"]
+std = [
+	"asimov-module/std",
+	"clientele/std",
+	"serde/std",
+	"serde_json/std",
+	"tracing/std",
+	"tracing-subscriber/std"
+]
 unstable = []
 
 [dependencies]

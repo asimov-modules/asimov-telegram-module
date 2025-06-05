@@ -6,8 +6,8 @@ use clientele::{
     SysexitsError::{self, *},
     crates::clap::{self, Parser, Subcommand},
 };
-use miette::{IntoDiagnostic, Result, miette};
-use oxrdf::{Literal, NamedNode, Triple};
+use miette::{Result, miette};
+// use oxrdf::{Literal, NamedNode, Triple};
 
 /// ASIMOV Telegram Cataloger
 #[derive(Debug, Parser)]
@@ -15,6 +15,14 @@ use oxrdf::{Literal, NamedNode, Triple};
 struct Options {
     #[clap(flatten)]
     flags: StandardOptions,
+
+    /// Available subjects: `chats`, `groups`, `members`, `users`
+    #[clap(long, short, value_delimiter = ',')]
+    subjects: Vec<String>,
+
+    /// Maximum amount of members per group to fetch.
+    #[clap(long, default_value = "200")]
+    max_members: usize,
 
     #[clap(subcommand)]
     command: Option<Command>,
@@ -93,62 +101,135 @@ async fn main() -> Result<SysexitsError> {
     //     .unwrap()
     //     .for_writer(std::io::stdout());
 
+    let subjects = if !options.subjects.is_empty() {
+        options.subjects
+    } else {
+        vec![
+            "chats".into(),
+            "groups".into(),
+            "members".into(),
+            "users".into(),
+        ]
+    };
+
     let filter = asimov_telegram_module::jq::filter();
 
-    let chats = client.get_chats().await?;
-    for (_id, chat) in chats {
-        match filter.filter_json(chat) {
-            Ok(_) => (), // TODO: print as json or RDF?
-            Err(jq::JsonFilterError::NoOutput) => (),
-            Err(err) => {
-                tracing::error!(?err);
+    if subjects.contains(&"chats".to_string()) {
+        let chats = client.get_chats().await?;
+
+        for (_id, chat) in chats {
+            match filter.filter_json(chat) {
+                // TODO: print as json or RDF?
+                Ok(v) => println!("{v}"),
+                Err(jq::JsonFilterError::NoOutput) => (),
+                Err(err) => {
+                    tracing::error!(?err);
+                }
             }
+        }
+
+        // for (id, data) in chats {
+        //     let sub = NamedNode::new(format!("http://know.dev/chat/#{}", id)).unwrap();
+        //     if let Some(title) = data.title {
+        //         let triple = Triple::new(
+        //             sub.clone(),
+        //             NamedNode::new("http://know.dev/title").unwrap(),
+        //             Literal::new_simple_literal(title),
+        //         );
+        //         ser.serialize_triple(&triple).into_diagnostic()?;
+        //     }
+        //     if let Some(supergroup) = data.supergroup {
+        //         let triple = Triple::new(
+        //             sub.clone(),
+        //             NamedNode::new("http://know.dev/supergroup").unwrap(),
+        //             Literal::new_simple_literal(supergroup.to_string()), // TODO: typed literal
+        //         );
+        //         ser.serialize_triple(&triple).into_diagnostic()?;
+        //     }
+        // }
+        //
+    }
+
+    if subjects.contains(&"groups".to_string()) {
+        let basicgroups = client.get_basicgroups().await?;
+        for (_id, basicgroup) in basicgroups {
+            match filter.filter_json(basicgroup) {
+                // TODO: print as json or RDF?
+                Ok(v) => println!("{v}"),
+                Err(jq::JsonFilterError::NoOutput) => (),
+                Err(err) => {
+                    tracing::error!(?err);
+                }
+            }
+        }
+
+        let supergroups = client.get_supergroups().await?;
+        for (_id, supergroup) in supergroups {
+            match filter.filter_json(supergroup) {
+                // TODO: print as json or RDF?
+                Ok(v) => println!("{v}"),
+                Err(jq::JsonFilterError::NoOutput) => (),
+                Err(err) => {
+                    tracing::error!(?err);
+                }
+            }
+        }
+
+        // for (id, data) in supergroups {
+        //     let sub = NamedNode::new(format!("http://know.dev/supergroup/#{}", id)).unwrap();
+        //     for name in data.usernames {
+        //         let triple = Triple::new(
+        //             sub.clone(),
+        //             NamedNode::new("http://know.dev/username").unwrap(),
+        //             Literal::new_simple_literal(name),
+        //         );
+        //         ser.serialize_triple(&triple).into_diagnostic()?;
+        //     }
+        // }
+    }
+
+    if subjects.contains(&"members".to_string()) {
+        let members = client.get_group_members(Some(options.max_members)).await?;
+        tracing::debug!(
+            len = members.values().map(|ms| ms.len()).sum::<usize>(),
+            "Got members"
+        );
+        // TODO: this needs to print the group id too
+        for (id, group_members) in members {
+            for member in group_members {
+                match filter.filter_json(member) {
+                    // TODO: print as json or RDF?
+                    Ok(v) => println!("{}", serde_json::json!({"group_id": id, "member": v})),
+                    // Ok(v) => println!("{v}"),
+                    Err(jq::JsonFilterError::NoOutput) => (),
+                    Err(err) => {
+                        tracing::error!(?err);
+                    }
+                }
+            }
+            // for m in group_members {
+            //     tracing::debug!(%id, %m, "Member");
+            // }
         }
     }
 
-    // for (id, data) in chats {
-    //     let sub = NamedNode::new(format!("http://know.dev/chat/#{}", id)).unwrap();
-    //     if let Some(title) = data.title {
-    //         let triple = Triple::new(
-    //             sub.clone(),
-    //             NamedNode::new("http://know.dev/title").unwrap(),
-    //             Literal::new_simple_literal(title),
-    //         );
-    //         ser.serialize_triple(&triple).into_diagnostic()?;
-    //     }
-    //     if let Some(supergroup) = data.supergroup {
-    //         let triple = Triple::new(
-    //             sub.clone(),
-    //             NamedNode::new("http://know.dev/supergroup").unwrap(),
-    //             Literal::new_simple_literal(supergroup.to_string()), // TODO: typed literal
-    //         );
-    //         ser.serialize_triple(&triple).into_diagnostic()?;
-    //     }
-    // }
-    //
-
-    let supergroups = client.get_supergroups().await?;
-    for (_id, supergroup) in supergroups {
-        match filter.filter_json(supergroup) {
-            Ok(_) => (), // TODO: print as json or RDF?
-            Err(jq::JsonFilterError::NoOutput) => (),
-            Err(err) => {
-                tracing::error!(?err);
+    if subjects.contains(&"users".to_string()) {
+        let users = client.get_users().await?;
+        tracing::debug!(len = users.len(), "Got users");
+        for (_id, user) in users {
+            match filter.filter_json(user) {
+                // TODO: print as json or RDF?
+                Ok(v) => println!("{v}"),
+                Err(jq::JsonFilterError::NoOutput) => (),
+                Err(err) => {
+                    tracing::error!(?err);
+                }
             }
         }
+        // for (id, u) in users {
+        //     tracing::debug!(%id, %u, "User")
+        // }
     }
-
-    // for (id, data) in supergroups {
-    //     let sub = NamedNode::new(format!("http://know.dev/supergroup/#{}", id)).unwrap();
-    //     for name in data.usernames {
-    //         let triple = Triple::new(
-    //             sub.clone(),
-    //             NamedNode::new("http://know.dev/username").unwrap(),
-    //             Literal::new_simple_literal(name),
-    //         );
-    //         ser.serialize_triple(&triple).into_diagnostic()?;
-    //     }
-    // }
 
     // ser.finish().into_diagnostic()?;
 
