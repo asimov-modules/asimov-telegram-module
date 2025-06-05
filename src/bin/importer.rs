@@ -2,8 +2,6 @@
 
 use std::sync::Arc;
 
-use asimov_telegram_module::telegram::{Client, Config};
-use asimov_telegram_module::jq;
 use clientele::{
     crates::clap::{self, Parser, Subcommand},
     StandardOptions,
@@ -12,11 +10,11 @@ use clientele::{
 use futures::StreamExt;
 use miette::{miette, Result};
 use serde_json::Value;
-use tracing_subscriber::fmt;
 
-/// ASIMOV Telegram Importer
+use asimov_telegram_module::telegram::{Client, Config};
+
 #[derive(Debug, Parser)]
-#[command(name = "asimov-telegram-importer", long_about)]
+#[command(name = "asimov-telegram-importer", long_about = "ASIMOV Telegram Importer")]
 struct Options {
     #[clap(flatten)]
     flags: StandardOptions,
@@ -27,22 +25,20 @@ struct Options {
 
 #[derive(Clone, Debug, Subcommand)]
 enum Command {
-    /// Ask Telegram to send a login code to `phone`
     SendCode { phone: String },
-    /// Confirm code you received in Telegram
     VerifyCode { code: String },
 }
 
 #[tokio::main]
 async fn main() -> Result<SysexitsError> {
     clientele::dotenv().ok();
-    fmt::init();
+    tracing_subscriber::fmt::init();
 
     let Ok(args) = clientele::args_os() else { return Ok(EX_USAGE) };
-    let options  = Options::parse_from(&args);
+    let options = Options::parse_from(&args);
 
     if options.flags.version {
-        println!("asimov-telegram {}", env!("CARGO_PKG_VERSION"));
+        println!("asimov-telegram-importer {}", env!("CARGO_PKG_VERSION"));
         return Ok(EX_OK);
     }
 
@@ -54,17 +50,24 @@ async fn main() -> Result<SysexitsError> {
         ));
     };
 
-    let cfg = Config {
+    let config = Config {
         database_directory: data_dir.into(),
-        api_id:   std::env::var("API_ID").expect("API_ID must be set"),
+        api_id: std::env::var("API_ID").expect("API_ID must be set"),
         api_hash: std::env::var("API_HASH").expect("API_HASH must be set"),
     };
-    let client = Arc::new(Client::new(cfg).unwrap().init().await.unwrap());
 
-    match &options.command {
-        Some(Command::SendCode { phone })  => { client.send_auth_request(phone).await?; return Ok(EX_OK); }
-        Some(Command::VerifyCode { code }) => { client.send_auth_code(code).await?;     return Ok(EX_OK); }
-        None => {}
+    let client = Arc::new(Client::new(config).unwrap().init().await.unwrap());
+
+    match options.command {
+        Some(Command::SendCode { phone }) => {
+            client.send_auth_request(&phone).await?;
+            return Ok(EX_OK);
+        }
+        Some(Command::VerifyCode { code }) => {
+            client.send_auth_code(&code).await?;
+            return Ok(EX_OK);
+        }
+        None => (),
     }
 
     if client.is_need_code().await {
@@ -78,7 +81,7 @@ async fn main() -> Result<SysexitsError> {
         ));
     }
 
-    let filter = jq::filter();
+    let filter = asimov_telegram_module::jq::filter();
     let st = Arc::clone(&client).all_messages_stream();
     tokio::pin!(st);
 
@@ -87,18 +90,16 @@ async fn main() -> Result<SysexitsError> {
     while let Some(res) = st.next().await {
         match res {
             Ok(msg) => {
-                if let Some(Value::Object(content)) = msg.other.get("content") {
+                let chat_id = msg["chat_id"].as_i64().unwrap_or(0);
+                if let Some(Value::Object(content)) = msg.get("content") {
                     if let Some(Value::Object(text)) = content.get("text") {
                         if let Some(Value::String(text_str)) = text.get("text") {
-                            println!(">> {}", text_str);
+                            println!("chat_id: {}, text: {}", chat_id, text_str);
                         }
                     }
                 }
 
-                let value = serde_json::to_value(&msg)
-                    .map_err(|e| miette!("Failed to serialize message: {}", e))?;
-
-                match filter.filter_json(value) {
+                match filter.filter_json(msg.clone()) {
                     Ok(filtered) => {
                         println!(
                             "{}",
@@ -107,16 +108,16 @@ async fn main() -> Result<SysexitsError> {
                         );
                         total += 1;
                         tracing::info!(
-                chat_id    = msg.chat_id,
-                message_id = msg.id,
-                "Processed message"
-            );
+                            chat_id,
+                            message_id = msg["id"].as_i64().unwrap_or(0),
+                            "Processed message"
+                        );
                     }
                     Err(jq::JsonFilterError::NoOutput) => (),
                     Err(err) => tracing::error!(?err, "Filter failed"),
                 }
             }
-            Err(e) => tracing::warn!("TDLib error: {e}"),
+            Err(e) => tracing::error!("TDLib error: {e}"),
         }
     }
 
