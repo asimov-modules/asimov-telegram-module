@@ -2,20 +2,12 @@
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use serde_json::{Value, json};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    ffi::{CStr, CString, c_char, c_int, c_void},
-    format,
-    path::PathBuf,
-    ptr::NonNull,
-    string::{String, ToString},
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
-    vec,
-    vec::Vec,
-};
+use std::{collections::{BTreeMap, BTreeSet}, println, ffi::{CStr, CString, c_char, c_int, c_void}, format, path::PathBuf, ptr::NonNull, string::{String, ToString}, sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+}, vec, vec::Vec};
+use async_stream::try_stream;
+use futures::Stream;
 use tokio::sync::{RwLock, oneshot};
 
 mod messages;
@@ -155,7 +147,7 @@ impl Client {
                         }
                         Ok(TdLibResponse::UpdateSupergroup { supergroup }) => {
                             let State::Authorized {
-                                ref mut supergroup_data,
+                                ref mut supergroups,
                                 ..
                             } = *state.blocking_write()
                             else {
@@ -447,30 +439,87 @@ impl Client {
         Ok(())
     }
 
+    pub fn all_messages_stream(
+        self: Arc<Self>,
+    ) -> impl Stream<Item = Result<Message>> + Send + 'static {
+        try_stream! {
+            let chat_map = self.get_chats().await?;
+            tracing::debug!(chat_count=chat_map.len(), "Starting message stream for chats");
+            println!("chat_map.keys(): {:?}", chat_map.keys());
+            for &chat_id in chat_map.keys() {
+                tracing::info!(chat_id, "Processing chat");
+                let mut from_msg_id = 0;
+                loop {
+                    println!("chat_id: {:?}", chat_id);
+                    tracing::debug!(chat_id, from_msg_id, "Fetching chat history");
+                    let messages = match self.get_chat_history(chat_id, from_msg_id, 100).await {
+                        Ok(msgs) => msgs,
+                        Err(err) => {
+                            tracing::warn!(%chat_id, %err, "Skipping chat due to error");
+                            break;
+                        }
+                    };
+
+                    tracing::debug!(chat_id, message_count=messages.len(), "Received messages");
+
+                    if messages.is_empty() {
+                        tracing::debug!(chat_id, "No more messages in chat");
+                        break;
+                    }
+
+                    let last_msg_id = messages.last().map(|m| m.id).unwrap_or(0);
+                    tracing::debug!(chat_id, last_msg_id, "Last message ID");
+
+                    for msg in messages {
+                        yield msg;
+                    }
+
+                    if last_msg_id == 0 || last_msg_id == from_msg_id {
+                        tracing::debug!(chat_id, last_msg_id, from_msg_id, "Stopping chat message loop");
+                        break;
+                    }
+
+                    from_msg_id = last_msg_id;
+                }
+            }
+        }
+    }
+
     async fn get_chat_history(
         &self,
         chat_id: i64,
         from_message_id: i64,
+        limit: i32,
     ) -> Result<Vec<Message>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
+        if limit < 1 || limit > 100 {
+            bail!("Limit must be between 1 and 100");
+        }
+        let state = self.state.read().await;
+        if let State::Authorized { ref chats, .. } = *state {
+            if !chats.contains_key(&chat_id) {
+                bail!("Chat ID {} not found", chat_id);
+            }
+        }
 
         let req = json!({
             "@type": "getChatHistory",
             "chat_id": chat_id,
             "from_message_id": from_message_id,
             "offset": 0,
-            "limit": "50",
+            "limit": limit,
             "only_local": false
         });
 
         let resp = self.request(req).await?;
-        let response = serde_json::from_value::<TdLibResponse>(resp)
+        tracing::debug!(chat_id, from_message_id, response=%resp, "Received getChatHistory response");
+
+        let response = serde_json::from_value::<Messages>(resp)
             .map_err(|e| miette!("Failed to parse response: {}", e))?;
 
-        match response {
-            TdLibResponse::Messages { messages } => Ok(messages.messages),
-            _ => Err(miette!("Unexpected response type")),
-        }
+        tracing::debug!(chat_id, message_count=response.messages.len(), "Parsed messages");
+
+        Ok(response.messages)
     }
 
     async fn request(&self, mut msg: Value) -> Result<Value> {

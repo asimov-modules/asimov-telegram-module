@@ -43,6 +43,9 @@ tokio = { version = "1.45", default-features = false, features = ["macros", "rt"
 tracing = { version = "0.1.41", default-features = false }
 tracing-subscriber = { version = "0.3.19", default-features = false, features = ["fmt"] }
 futures = "0.3.31"
+async-stream = "0.3.6"
+libz-sys = { version = "1.1.20", features = ["static"] }
+openssl-sys = { version = "0.9.104", features = ["vendored"] }
 
 [profile.release]
 opt-level = "z"

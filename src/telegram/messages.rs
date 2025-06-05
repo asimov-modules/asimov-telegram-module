@@ -1,7 +1,7 @@
 // This is free and unencumbered software released into the public domain.
 
 use serde_json::Value;
-use std::{collections::BTreeMap, string::String};
+use std::{collections::BTreeMap, string::String, vec::Vec};
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "@type", rename_all = "camelCase")]
@@ -80,25 +80,27 @@ pub struct UpdateUser {
     pub other: BTreeMap<String, Value>,
 }
 
-#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Message {
     #[serde(rename = "@type")]
     pub typ: String,
 
+    #[serde(default)]
     pub id: i64,
 
+    #[serde(default)]
     pub chat_id: i64,
 
     #[serde(flatten)]
-    pub content: BTreeMap<String, Value>,
+    pub other: BTreeMap<String, Value>,
 }
 
-#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Messages {
     #[serde(rename = "@type")]
     pub typ: String,
 
-    pub total_count: i32,
+    pub total_count: Option<i32>,
 
     pub messages: Vec<Message>,
 }
