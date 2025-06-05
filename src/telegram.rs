@@ -6,7 +6,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     format,
     path::PathBuf,
-    string::{String, ToString},
+    string::String,
     sync::Arc,
     vec,
     vec::Vec,
@@ -172,14 +172,12 @@ impl Client {
         })
     }
 
-    pub async fn init(&self) -> Result<()> {
+    pub async fn init(self) -> Result<Self> {
         assert_eq!(*self.state.read().await, State::Init);
-
-        tracing::debug!(target: "set_tdlib_parameters", database_directory=%self.config.database_directory.to_string_lossy(), "initializing");
 
         tdlib_rs::functions::set_tdlib_parameters(
             false,
-            self.config.database_directory.to_string_lossy().to_string() + "/",
+            self.config.database_directory.to_string_lossy().into(),
             "".into(),
             "".into(), // TODO: create, save, and fetch a key securely (i.e. to keychain on macos)
             true,
@@ -197,8 +195,6 @@ impl Client {
         .await
         .map_err(|e| miette!("TdLib client initialization failed: {}", e.message))?;
 
-        tracing::debug!(target: "set_tdlib_parameters", "initialized");
-
         for _ in 0..10 {
             match *self.state.read().await {
                 State::AwaitingPhoneNumber | State::AwaitingCode | State::Authorized { .. } => {
@@ -208,7 +204,7 @@ impl Client {
             }
         }
 
-        Ok(())
+        Ok(self)
     }
 
     pub async fn is_authorised(&self) -> bool {
