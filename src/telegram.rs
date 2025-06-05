@@ -301,7 +301,7 @@ impl Client {
     ) -> Result<BTreeMap<i64, Vec<Value>>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
-        self.load_chats().await.context("Failed to load chat")?;
+        self.load_chats().await.context("Failed to load chats")?;
 
         let (basicgroups, supergroups) = {
             let State::Authorized {
