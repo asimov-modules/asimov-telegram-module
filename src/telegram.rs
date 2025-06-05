@@ -348,8 +348,8 @@ impl Client {
             .map_err(|e| miette!(e.message))
             .into_iter()
             .flat_map(|tdlib_rs::enums::BasicGroupFullInfo::BasicGroupFullInfo(info)| info.members)
-            .map(|x| serde_json::to_value(x).into_diagnostic())
-            .collect::<Result<Vec<_>>>()
+            .map(|member| serde_json::to_value(member).into_diagnostic())
+            .collect()
     }
 
     pub async fn get_supergroup_members(
@@ -383,7 +383,7 @@ impl Client {
                         members
                             .members
                             .iter()
-                            .filter_map(|m| serde_json::to_value(m.clone()).ok()),
+                            .filter_map(|m| serde_json::to_value(m).ok()),
                     );
                     if group_members.len() >= members.total_count as usize {
                         break;
