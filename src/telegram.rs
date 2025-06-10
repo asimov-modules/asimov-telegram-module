@@ -436,8 +436,8 @@ impl Client {
         limit: i32,
     ) -> Result<Vec<Value>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
-        if limit < 1 || limit > 50 {
-            bail!("Limit must be between 1 and 10");
+        if limit < 1 || limit > 100 {
+            bail!("Limit must be between 1 and 100");
         }
 
         let state = self.state.read().await;
