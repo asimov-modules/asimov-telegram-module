@@ -449,8 +449,6 @@ impl Client {
 
         tracing::debug!(chat_id, from_message_id, limit, "Fetching chat history");
 
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
         let res = tokio::time::timeout(
             std::time::Duration::from_secs(60),
             tdlib_rs::functions::get_chat_history(
