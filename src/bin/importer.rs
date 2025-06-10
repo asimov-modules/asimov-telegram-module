@@ -91,13 +91,6 @@ async fn main() -> Result<SysexitsError> {
         match res {
             Ok(msg) => {
                 let chat_id = msg["chat_id"].as_i64().unwrap_or(0);
-                if let Some(Value::Object(content)) = msg.get("content") {
-                    if let Some(Value::Object(text)) = content.get("text") {
-                        if let Some(Value::String(text_str)) = text.get("text") {
-                            println!("chat_id: {}, text: {}", chat_id, text_str);
-                        }
-                    }
-                }
 
                 match filter.filter_json(msg.clone()) {
                     Ok(filtered) => {
