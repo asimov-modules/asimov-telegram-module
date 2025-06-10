@@ -135,12 +135,19 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "asimov-module"
-version = "25.0.0-dev.7"
+version = "25.0.0-dev.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d30c3c75bfa39cb078eb22bb2f3c7e32969d37a0e9ee4e05943e75b5a34990f5"
+checksum = "e7ac8b71da155cde753c1c253d123483dc1a89e1e08400c53b0fc51f40c9a067"
 dependencies = [
+ "clientele",
  "dogma",
+ "getenv",
+ "secrecy",
+ "serde",
+ "slab",
  "tracing",
+ "tracing-subscriber",
+ "url",
 ]
 
 [[package]]
@@ -373,9 +380,9 @@ checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
 name = "clientele"
-version = "0.3.5"
+version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f27c4aa79c524d60012b7ee7eb3b7d1591e45434d3495520b29263fe41eb0859"
+checksum = "07ab70eb434a01fc8bc1787981828ccf36f1e80a1242b915e085e913b4290e66"
 dependencies = [
  "argfile",
  "camino",
@@ -586,9 +593,9 @@ dependencies = [
 
 [[package]]
 name = "dogma"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e840aa7280133a6c909a6c1d5f308ec01a31ca728c48f12aeec315f17fa28b8a"
+checksum = "b4329b663bcb56cab24a624e8eb2032805e999c3724cd570e3ba1aef5a9d7bb8"
 dependencies = [
  "iri-string",
  "known-schemes",
@@ -861,9 +868,9 @@ checksum = "a8d1add55171497b4705a648c6b583acafb01d58050a51727785f0b2c8e0a2b2"
 
 [[package]]
 name = "gofer"
-version = "0.1.4"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "331f3f8019984414d11a8571c5553283eacd716d97a7963fdc35997b5c625fda"
+checksum = "fd6761a81efac6a3b56c289383c0e94539ee8ad7441feb682436778019a5bfb0"
 dependencies = [
  "clap",
  "data-url",
@@ -1344,9 +1351,9 @@ dependencies = [
 
 [[package]]
 name = "known-schemes"
-version = "0.1.0"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51095fa5fadee753dca603305250a8de782448bb86c346ddf28d5352aec4b855"
+checksum = "2474d01704cbcb2ed17c7cc1106b950775b9979d983c9b129adbe830cb317c2c"
 
 [[package]]
 name = "lazy_static"
@@ -2095,12 +2102,9 @@ checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
 
 [[package]]
 name = "slab"
-version = "0.4.9"
+version = "0.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
-dependencies = [
- "autocfg",
-]
+checksum = "04dc19736151f35336d325007ac991178d504a119863a2fcb3758cdb5e52c50d"
 
 [[package]]
 name = "smallvec"
@@ -2481,6 +2485,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e672c95779cf947c5311f83787af4fa8fffd12fb27e4993211a84bdfd9610f9c"
 dependencies = [
  "once_cell",
+ "valuable",
+]
+
+[[package]]
+name = "tracing-log"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
+dependencies = [
+ "log",
+ "once_cell",
+ "tracing-core",
 ]
 
 [[package]]
@@ -2492,6 +2508,7 @@ dependencies = [
  "sharded-slab",
  "thread_local",
  "tracing-core",
+ "tracing-log",
 ]
 
 [[package]]
@@ -2582,6 +2599,12 @@ name = "utf8parse"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
+
+[[package]]
+name = "valuable"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "vcpkg"

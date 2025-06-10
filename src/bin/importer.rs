@@ -3,17 +3,20 @@
 use std::sync::Arc;
 
 use clientele::{
-    crates::clap::{self, Parser, Subcommand},
     StandardOptions,
     SysexitsError::{self, *},
+    crates::clap::{self, Parser, Subcommand},
 };
 use futures::StreamExt;
-use miette::{miette, Result};
+use miette::{Result, miette};
 
 use asimov_telegram_module::telegram::{Client, Config};
 
 #[derive(Debug, Parser)]
-#[command(name = "asimov-telegram-importer", long_about = "ASIMOV Telegram Importer")]
+#[command(
+    name = "asimov-telegram-importer",
+    long_about = "ASIMOV Telegram Importer"
+)]
 struct Options {
     #[clap(flatten)]
     flags: StandardOptions,
@@ -30,11 +33,15 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> Result<SysexitsError> {
+    // Load environment variables from `.env`:
     clientele::dotenv().ok();
-    tracing_subscriber::fmt::init();
 
-    let Ok(args) = clientele::args_os() else { return Ok(EX_USAGE) };
+    let Ok(args) = clientele::args_os() else {
+        return Ok(EX_USAGE);
+    };
     let options = Options::parse_from(&args);
+
+    asimov_module::init_tracing_subscriber(&options.flags).expect("failed to initialize logging");
 
     if options.flags.version {
         println!("asimov-telegram-importer {}", env!("CARGO_PKG_VERSION"));
@@ -104,7 +111,6 @@ async fn main() -> Result<SysexitsError> {
                     Err(jq::JsonFilterError::NoOutput) => (),
                     Err(err) => tracing::error!(?err, "Filter failed"),
                 }
-
             }
             Err(e) => tracing::error!("TDLib error: {e}"),
         }
