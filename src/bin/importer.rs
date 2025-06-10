@@ -94,11 +94,7 @@ async fn main() -> Result<SysexitsError> {
 
                 match filter.filter_json(msg.clone()) {
                     Ok(filtered) => {
-                        println!(
-                            "{}",
-                            serde_json::to_string_pretty(&filtered)
-                                .map_err(|e| miette!("Failed to serialize filtered: {}", e))?
-                        );
+                        println!("{filtered}");
                         total += 1;
                         tracing::debug!(
                             chat_id,
