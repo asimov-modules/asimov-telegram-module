@@ -510,7 +510,7 @@ impl Client {
                 loop {
                     let result = tokio::time::timeout(
                         std::time::Duration::from_secs(60),
-                        self.get_chat_history(chat_id, from_msg_id, 10),
+                        self.get_chat_history(chat_id, from_msg_id, 100),
                     )
                     .await;
 
