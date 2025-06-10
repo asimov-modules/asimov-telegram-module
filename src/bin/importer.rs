@@ -9,7 +9,6 @@ use clientele::{
 };
 use futures::StreamExt;
 use miette::{miette, Result};
-use serde_json::Value;
 
 use asimov_telegram_module::telegram::{Client, Config};
 
