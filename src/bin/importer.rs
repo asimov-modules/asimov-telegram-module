@@ -107,7 +107,7 @@ async fn main() -> Result<SysexitsError> {
                                 .map_err(|e| miette!("Failed to serialize filtered: {}", e))?
                         );
                         total += 1;
-                        tracing::info!(
+                        tracing::debug!(
                             chat_id,
                             message_id = msg["id"].as_i64().unwrap_or(0),
                             "Processed message"
