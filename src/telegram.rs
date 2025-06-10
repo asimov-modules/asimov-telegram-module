@@ -501,7 +501,7 @@ impl Client {
             tracing::debug!(chat_ids=chat_ids.len(), "Chat IDs to process");
 
             for chat_id in chat_ids {
-                tracing::info!(chat_id, "Processing chat");
+                tracing::debug!(chat_id, "Processing chat");
                 let mut from_msg_id = 0;
                 let mut prev_msg_id = 0;
                 let mut attempts = 0;
