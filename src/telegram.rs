@@ -490,7 +490,7 @@ impl Client {
         try_stream! {
             let chat_ids = match self.get_chat_ids().await {
                 Ok(ids) => {
-                    tracing::info!(chat_count=ids.len(), "Starting message stream for chats");
+                    tracing::debug!(chat_count=ids.len(), "Starting message stream for chats");
                     ids.into_iter().collect::<Vec<i64>>()
                 }
                 Err(e) => {
