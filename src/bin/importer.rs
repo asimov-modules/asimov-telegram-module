@@ -106,7 +106,6 @@ async fn main() -> Result<SysexitsError> {
                     Err(err) => tracing::error!(?err, "Filter failed"),
                 }
 
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             }
             Err(e) => tracing::error!("TDLib error: {e}"),
         }
