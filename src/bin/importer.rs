@@ -112,6 +112,6 @@ async fn main() -> Result<SysexitsError> {
         }
     }
 
-    println!("Processed {total} messages across all chats");
+    tracing::debug!("Processed {total} messages across all chats");
     Ok(EX_OK)
 }
