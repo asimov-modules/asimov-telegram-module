@@ -60,6 +60,8 @@ async fn main() -> Result<SysexitsError> {
         database_directory: data_dir.into(),
         api_id: std::env::var("API_ID").expect("API_ID must be set"),
         api_hash: std::env::var("API_HASH").expect("API_HASH must be set"),
+        encryption_key: asimov_telegram_module::telegram::get_or_create_encryption_key()
+            .expect("failed to get encryption key from keyring"),
     };
 
     let client = Arc::new(Client::new(config).unwrap().init().await.unwrap());
