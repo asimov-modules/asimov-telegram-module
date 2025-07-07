@@ -606,7 +606,7 @@ pub fn get_or_create_encryption_key() -> Result<String> {
             };
             entry
                 .set_password(&key)
-                .map_err(|e| miette!("Failed to store encryption new key in keyring: {e}"))?;
+                .map_err(|e| miette!("Failed to store new encryption key in keyring: {e}"))?;
             tracing::debug!("Generated and stored new encryption key in keyring");
             Ok(key)
         }
