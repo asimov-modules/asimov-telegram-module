@@ -1,10 +1,11 @@
 // This is free and unencumbered software released into the public domain.
 
+use asimov_module::models::ModuleManifest;
 use asimov_telegram_module::telegram::{Client, Config};
 use clientele::{
     StandardOptions,
     SysexitsError::{self, *},
-    crates::clap::{self, Parser, Subcommand},
+    crates::clap::{self, Parser},
 };
 use miette::{Result, miette};
 // use oxrdf::{Literal, NamedNode, Triple};
@@ -23,15 +24,6 @@ struct Options {
     /// Maximum amount of members per group to fetch.
     #[clap(long, default_value = "200")]
     max_members: usize,
-
-    #[clap(subcommand)]
-    command: Option<Command>,
-}
-
-#[derive(Clone, Debug, Subcommand)]
-enum Command {
-    SendCode { phone: String },
-    VerifyCode { code: String },
 }
 
 #[tokio::main]
@@ -63,40 +55,28 @@ async fn main() -> Result<SysexitsError> {
         ));
     };
 
+    let manifest = ModuleManifest::read_manifest("telegram").unwrap();
+
+    let api_id = manifest
+        .variable("API_ID", None)
+        .expect("Missing API_ID. Run `asimov module config telegram`");
+    let api_hash = manifest
+        .variable("API_HASH", None)
+        .expect("Missing API_HASH. Run `asimov module config telegram`");
+    let encryption_key = asimov_telegram_module::telegram::get_or_create_encryption_key()
+        .expect("Failed to get database encryption key from keyring");
+
     let config = Config {
         database_directory: data_dir.into(),
-        api_id: std::env::var("API_ID").expect("API_ID must be set"),
-        api_hash: std::env::var("API_HASH").expect("API_HASH must be set"),
-        encryption_key: asimov_telegram_module::telegram::get_or_create_encryption_key()
-            .expect("failed to get encryption key from keyring"),
+        api_id,
+        api_hash,
+        encryption_key,
     };
 
     let client = Client::new(config).unwrap().init().await.unwrap();
 
-    match options.command {
-        Some(Command::SendCode { phone }) => {
-            client.send_auth_request(&phone).await?;
-            return Ok(EX_OK);
-        }
-        Some(Command::VerifyCode { code }) => {
-            client.send_auth_code(&code).await?;
-            return Ok(EX_OK);
-        }
-        None => (),
-    }
-
-    if client.is_need_code().await {
-        // TODO: improve
-        return Err(miette!(
-            "Expecting login code: use the `verify-code` subcommand and provide the code sent to you by telegram"
-        ));
-    }
-
     if !client.is_authorised().await {
-        // TODO: improve
-        return Err(miette!(
-            "Currently unauthorized: use the `send-code` subcommand to request a login code from telegram for your account. Then verify with `verify-code`"
-        ));
+        return Err(miette!("Unauthorized. Run `asimov module config telegram`"));
     }
 
     // let mut ser = oxrdfio::RdfSerializer::from_format(oxrdfio::RdfFormat::Turtle)

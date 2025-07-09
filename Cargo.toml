@@ -73,5 +73,9 @@ name = "asimov-telegram-cataloger"
 path = "src/bin/cataloger.rs"
 
 [[bin]]
+name = "asimov-telegram-configurator"
+path = "src/bin/configurator.rs"
+
+[[bin]]
 name = "asimov-telegram-importer"
 path = "src/bin/importer.rs"

@@ -1,8 +1,5 @@
 // This is free and unencumbered software released into the public domain.
 
-use std::io::BufRead;
-use std::io::Write;
-
 use asimov_module::models::ModuleManifest;
 use asimov_telegram_module::telegram::{Client, Config};
 use clientele::{
@@ -11,6 +8,7 @@ use clientele::{
     crates::clap::{self, Parser},
 };
 use miette::{Result, miette};
+use std::io::{BufRead, Write};
 
 /// ASIMOV Telegram Configurator
 #[derive(Debug, Parser)]
@@ -53,19 +51,18 @@ async fn main() -> Result<SysexitsError> {
 
     let api_id = manifest
         .variable("API_ID", None)
-        .or_else(|_| std::env::var("API_ID"))
-        .expect("API_ID");
+        .expect("Missing API_ID. Run `asimov module config telegram`");
     let api_hash = manifest
         .variable("API_HASH", None)
-        .or_else(|_| std::env::var("API_HASH"))
-        .expect("API_HASH");
+        .expect("Missing API_HASH. Run `asimov module config telegram`");
+    let encryption_key = asimov_telegram_module::telegram::get_or_create_encryption_key()
+        .expect("Failed to get database encryption key from keyring");
 
     let config = Config {
         database_directory: data_dir.into(),
         api_id,
         api_hash,
-        encryption_key: asimov_telegram_module::telegram::get_or_create_encryption_key()
-            .expect("failed to get encryption key from keyring"),
+        encryption_key,
     };
 
     let client = Client::new(config).unwrap().init().await.unwrap();
