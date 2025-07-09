@@ -59,6 +59,9 @@ tracing-subscriber = { version = "0.3.19", default-features = false, features = 
 ] }
 futures = "0.3.31"
 async-stream = "0.3.6"
+keyring = "2.3"
+rand = "0.8"
+hex = "0.4"
 
 [profile.release]
 opt-level = "z"

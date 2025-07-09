@@ -1,5 +1,7 @@
 // This is free and unencumbered software released into the public domain.
 
+use async_stream::try_stream;
+use futures::Stream;
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use serde_json::Value;
 use std::{
@@ -12,8 +14,6 @@ use std::{
     vec::Vec,
 };
 use tokio::sync::RwLock;
-use futures::Stream;
-use async_stream::try_stream;
 
 // Have to do this manually. If you use tdlib-rs's provided
 // `tdlib_rs::functions::set_log_verbosity_level` you *will* get output on stdout because that one
@@ -43,6 +43,7 @@ pub struct Config {
     pub api_id: String,
     pub api_hash: String,
     pub database_directory: PathBuf,
+    pub encryption_key: String,
 }
 
 struct TdHandle(i32);
@@ -180,7 +181,7 @@ impl Client {
             false,
             self.config.database_directory.to_string_lossy().into(),
             "".into(),
-            "".into(), // TODO: create, save, and fetch a key securely (i.e. to keychain on macos)
+            self.config.encryption_key.clone(),
             true,
             true,
             true,
@@ -460,24 +461,27 @@ impl Client {
                 self.handle.0,
             ),
         )
-            .await
-            .map_err(|_| miette!("Request timed out after 60 seconds for chat_id: {}", chat_id))?;
+        .await
+        .map_err(|_| miette!("Request timed out after 60 seconds for chat_id: {chat_id}",))?;
 
         let messages = match res {
             Ok(tdlib_rs::enums::Messages::Messages(messages)) => messages
                 .messages
                 .into_iter()
                 .filter_map(|msg| {
-                    serde_json::to_value(msg).map_err(|e| {
-                        tracing::warn!(error=%e, "Failed to serialize message");
-                        e
-                    }).ok()
+                    serde_json::to_value(msg)
+                        .inspect_err(|e| tracing::warn!(error=%e, "Failed to serialize message"))
+                        .ok()
                 })
                 .collect::<Vec<Value>>(),
             Err(e) => bail!("Failed to get chat history: {}", e.message),
         };
 
-        tracing::debug!(chat_id, message_count=messages.len(), "Received chat history");
+        tracing::debug!(
+            chat_id,
+            message_count = messages.len(),
+            "Received chat history"
+        );
 
         Ok(messages)
     }
@@ -579,5 +583,35 @@ impl Client {
                 }
             }
         }
+    }
+}
+
+pub fn get_or_create_encryption_key() -> Result<String> {
+    let entry = keyring::Entry::new("asimov-telegram-module", "tdlib-encryption-key")
+        .map_err(|e| miette!("Failed to create keyring entry: {e}"))?;
+
+    match entry.get_password() {
+        Ok(key) => {
+            tracing::debug!("Retrieved existing encryption key from keyring");
+            Ok(key)
+        }
+        Err(keyring::Error::NoEntry) => {
+            // Generate a new key
+            let key = {
+                use rand::RngCore;
+                let mut key_bytes = [0u8; 32];
+                let mut rng = rand::rngs::OsRng;
+                rng.fill_bytes(&mut key_bytes);
+                hex::encode(key_bytes)
+            };
+            entry
+                .set_password(&key)
+                .map_err(|e| miette!("Failed to store new encryption key in keyring: {e}"))?;
+            tracing::debug!("Generated and stored new encryption key in keyring");
+            Ok(key)
+        }
+        Err(e) => Err(miette!(
+            "Failed to retrieve encryption key from keyring: {e}"
+        )),
     }
 }
