@@ -186,7 +186,10 @@ impl Client {
             true,
             true,
             false,
-            self.config.api_id.parse().unwrap(),
+            self.config
+                .api_id
+                .parse()
+                .map_err(|e| miette!("Invalid API_ID (`{}`): {e}", self.config.api_id))?,
             self.config.api_hash.clone(),
             "en".into(),
             "Desktop".into(),
