@@ -63,8 +63,7 @@ async fn main() -> Result<SysexitsError> {
     let api_hash = manifest
         .variable("API_HASH", None)
         .expect("Missing API_HASH. Run `asimov module config telegram`");
-    let encryption_key = asimov_telegram_module::telegram::get_or_create_encryption_key()
-        .expect("Failed to get database encryption key from keyring");
+    let encryption_key = asimov_telegram_module::telegram::get_or_create_encryption_key()?;
 
     let config = Config {
         database_directory: data_dir.into(),
