@@ -1,0 +1,17 @@
+# See: https://asimov-specs.github.io/module-manifest/
+name: telegram
+label: Telegram
+summary: Data import from a Telegram account
+links:
+  - https://github.com/asimov-modules/asimov-telegram-module
+config:
+  variables:
+    - name: API_ID
+      env: API_ID
+    - name: API_HASH
+      env: API_HASH
+provides:
+  programs:
+    - asimov-telegram-cataloger
+    - asimov-telegram-configurator
+    - asimov-telegram-importer
