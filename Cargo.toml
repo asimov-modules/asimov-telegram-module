@@ -71,6 +71,9 @@ opt-level = "z"
 strip = true
 lto = "thin"
 
+[patch.crates-io]
+asimov-module = { path = "../asimov.rs/lib/asimov-module/" }
+
 [[bin]]
 name = "asimov-telegram-cataloger"
 path = "src/bin/cataloger.rs"
