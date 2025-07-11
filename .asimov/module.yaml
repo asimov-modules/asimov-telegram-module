@@ -17,3 +17,6 @@ provides:
     - asimov-telegram-cataloger
     - asimov-telegram-configurator
     - asimov-telegram-importer
+handles:
+  url_protocols:
+    - tg
