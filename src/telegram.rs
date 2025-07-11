@@ -274,7 +274,7 @@ impl Client {
             return Ok(Default::default());
         };
 
-        Ok(chats.iter().map(|(id, _)| *id).collect())
+        Ok(chats.keys().cloned().collect())
     }
 
     pub async fn get_chats(&self) -> Result<BTreeMap<i64, Value>> {
@@ -465,15 +465,15 @@ impl Client {
         limit: i32,
     ) -> Result<Vec<Value>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
-        if limit < 1 || limit > 100 {
+        if !(1..=100).contains(&limit) {
             bail!("Limit must be between 1 and 100");
         }
 
         let state = self.state.read().await;
-        if let State::Authorized { ref chats, .. } = *state {
-            if !chats.contains_key(&chat_id) {
-                bail!("Chat ID {} not found", chat_id);
-            }
+        if let State::Authorized { ref chats, .. } = *state
+            && !chats.contains_key(&chat_id)
+        {
+            bail!("Chat ID {} not found", chat_id);
         }
 
         tracing::debug!(chat_id, from_message_id, limit, "Fetching chat history");
