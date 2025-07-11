@@ -18,6 +18,21 @@ struct Options {
     flags: StandardOptions,
 }
 
+fn ask(prompt: &str) -> String {
+    let mut stdout = std::io::stdout().lock();
+    let mut lines = std::io::stdin().lock().lines();
+
+    loop {
+        write!(&mut stdout, "{}", prompt).unwrap();
+        stdout.flush().unwrap();
+        if let Some(Ok(password)) = lines.next()
+            && !password.is_empty()
+        {
+            break password;
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<SysexitsError> {
     // Load environment variables from `.env`:
@@ -70,33 +85,31 @@ async fn main() -> Result<SysexitsError> {
         return Ok(EX_OK);
     }
 
-    let mut stdout = std::io::stdout().lock();
-    let mut lines = std::io::stdin().lock().lines();
-
     if !client.is_need_code().await {
-        let phone = loop {
-            write!(&mut stdout, "Enter phone: ").unwrap();
-            stdout.flush().unwrap();
-            if let Some(Ok(phone)) = lines.next()
-                && !phone.is_empty()
-            {
-                break phone;
-            }
-        };
-
+        let phone = ask("Enter phone: ");
         client.send_auth_request(&phone).await?;
     }
 
-    let code = loop {
-        write!(&mut stdout, "Enter code: ").unwrap();
-        stdout.flush().unwrap();
-        if let Some(Ok(code)) = lines.next()
-            && !code.is_empty()
-        {
-            break code;
-        }
-    };
+    let code = ask("Enter code: ");
     client.send_auth_code(&code).await?;
+
+    let mut password_hint = String::new();
+    while client.is_need_password(&mut password_hint).await {
+        let password = ask("Enter password: ");
+        match client.send_auth_password(&password).await {
+            Ok(_) => break,
+            Err(e) if e.message == "PASSWORD_HASH_INVALID" => {
+                println!("Invalid password, try again please.");
+                continue;
+            }
+            Err(e) => {
+                return Err(miette!(
+                    "Failed to confirm authentication password: {}",
+                    e.message
+                ));
+            }
+        }
+    }
 
     if !client.is_authorised().await {
         // TODO: improve

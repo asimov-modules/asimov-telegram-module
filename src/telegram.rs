@@ -30,6 +30,9 @@ enum State {
     Init,
     AwaitingPhoneNumber,
     AwaitingCode,
+    AwaitingPassword {
+        hint: String,
+    },
     Authorized {
         chats: BTreeMap<i64, Value>,
         basicgroups: BTreeMap<i64, Value>,
@@ -101,6 +104,11 @@ impl Client {
                             WaitTdlibParameters => *state.blocking_write() = State::Init,
                             WaitPhoneNumber => *state.blocking_write() = State::AwaitingPhoneNumber,
                             WaitCode(_) => *state.blocking_write() = State::AwaitingCode,
+                            WaitPassword(x) => {
+                                *state.blocking_write() = State::AwaitingPassword {
+                                    hint: x.password_hint,
+                                }
+                            }
                             Ready => {
                                 *state.blocking_write() = State::Authorized {
                                     chats: BTreeMap::new(),
@@ -114,7 +122,6 @@ impl Client {
                             | WaitEmailCode(_)
                             | WaitOtherDeviceConfirmation(_)
                             | WaitRegistration(_)
-                            | WaitPassword(_)
                             | LoggingOut
                             | Closing => (), // ignore
                         },
@@ -220,6 +227,15 @@ impl Client {
         matches!(*self.state.read().await, State::AwaitingCode)
     }
 
+    pub async fn is_need_password(&self, hint: &mut String) -> bool {
+        if let State::AwaitingPassword { hint: ref hint2 } = *self.state.read().await {
+            *hint = hint2.clone();
+            return true;
+        }
+
+        false
+    }
+
     pub async fn send_auth_request(&self, phone_number: &str) -> Result<()> {
         assert_eq!(*self.state.read().await, State::AwaitingPhoneNumber);
 
@@ -238,6 +254,15 @@ impl Client {
         tdlib_rs::functions::check_authentication_code(code.into(), self.handle.0)
             .await
             .map_err(|e| miette!("Failed to confirm authentication code: {}", e.message))
+    }
+
+    pub async fn send_auth_password(&self, password: &str) -> Result<(), tdlib_rs::types::Error> {
+        assert!(matches!(
+            *self.state.read().await,
+            State::AwaitingPassword { .. }
+        ));
+
+        tdlib_rs::functions::check_authentication_password(password.into(), self.handle.0).await
     }
 
     pub async fn get_chat_ids(&self) -> Result<BTreeSet<i64>> {
