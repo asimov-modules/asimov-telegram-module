@@ -73,17 +73,19 @@ async fn main() -> Result<SysexitsError> {
     let mut stdout = std::io::stdout().lock();
     let mut lines = std::io::stdin().lock().lines();
 
-    let phone = loop {
-        write!(&mut stdout, "Enter phone: ").unwrap();
-        stdout.flush().unwrap();
-        if let Some(Ok(phone)) = lines.next()
-            && !phone.is_empty()
-        {
-            break phone;
-        }
-    };
+    if !client.is_need_code().await {
+        let phone = loop {
+            write!(&mut stdout, "Enter phone: ").unwrap();
+            stdout.flush().unwrap();
+            if let Some(Ok(phone)) = lines.next()
+                && !phone.is_empty()
+            {
+                break phone;
+            }
+        };
 
-    client.send_auth_request(&phone).await?;
+        client.send_auth_request(&phone).await?;
+    }
 
     let code = loop {
         write!(&mut stdout, "Enter code: ").unwrap();
