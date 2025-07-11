@@ -7,8 +7,10 @@ links:
 config:
   variables:
     - name: API_ID
+      description: Your personal API_ID value, obtainable at https://my.telegram.org
       env: API_ID
     - name: API_HASH
+      description: Your personal API_HASH value, obtainable at https://my.telegram.org
       env: API_HASH
 provides:
   programs:
