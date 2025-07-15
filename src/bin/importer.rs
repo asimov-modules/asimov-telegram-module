@@ -20,8 +20,13 @@ struct Options {
     #[clap(flatten)]
     flags: StandardOptions,
 
-    #[clap(long, short = 'l')]
+    /// The maximum number of resources to list.
+    #[arg(value_name = "COUNT", short = 'n', long)]
     limit: Option<usize>,
+
+    /// The output format.
+    #[arg(value_name = "FORMAT", short = 'o', long)]
+    output: Option<String>,
 
     resource: String,
 }
