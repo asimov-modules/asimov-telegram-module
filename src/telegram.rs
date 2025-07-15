@@ -13,7 +13,7 @@ use std::{
 };
 use tdlib_rs::{
     enums::MessageSender,
-    types::{Message, MessageSenderUser},
+    types::{ChatMembers, Message, MessageSenderUser},
 };
 use tokio::sync::RwLock;
 
@@ -37,9 +37,6 @@ enum State {
     },
     Authorized {
         chats: BTreeMap<i64, Value>,
-        basicgroups: BTreeMap<i64, Value>,
-        supergroups: BTreeMap<i64, Value>,
-        users: BTreeMap<i64, Value>,
     },
 }
 
@@ -114,9 +111,6 @@ impl Client {
                             Ready => {
                                 *state.blocking_write() = State::Authorized {
                                     chats: BTreeMap::new(),
-                                    basicgroups: BTreeMap::new(),
-                                    supergroups: BTreeMap::new(),
-                                    users: BTreeMap::new(),
                                 }
                             }
                             Closed => break,
@@ -134,42 +128,6 @@ impl Client {
                             };
 
                             chats.insert(chat.chat.id, serde_json::to_value(chat.chat).unwrap());
-                        }
-                        Supergroup(supergroup) => {
-                            let State::Authorized {
-                                ref mut supergroups,
-                                ..
-                            } = *state.blocking_write()
-                            else {
-                                continue;
-                            };
-
-                            supergroups.insert(
-                                supergroup.supergroup.id,
-                                serde_json::to_value(supergroup.supergroup).unwrap(),
-                            );
-                        }
-                        BasicGroup(basicgroup) => {
-                            let State::Authorized {
-                                ref mut basicgroups,
-                                ..
-                            } = *state.blocking_write()
-                            else {
-                                continue;
-                            };
-
-                            basicgroups.insert(
-                                basicgroup.basic_group.id,
-                                serde_json::to_value(basicgroup.basic_group).unwrap(),
-                            );
-                        }
-                        User(user) => {
-                            let State::Authorized { ref mut users, .. } = *state.blocking_write()
-                            else {
-                                continue;
-                            };
-
-                            users.insert(user.user.id, serde_json::to_value(user.user).unwrap());
                         }
                         _ => (), // ignore
                     }
@@ -393,16 +351,12 @@ impl Client {
             .await;
 
             match res {
-                Ok(tdlib_rs::enums::ChatMembers::ChatMembers(members)) => {
-                    group_members.extend(
-                        members
-                            .members
-                            .iter()
-                            .filter_map(|m| serde_json::to_value(m).ok()),
-                    );
-                    if group_members.len() >= members.total_count as usize {
+                Ok(tdlib_rs::enums::ChatMembers::ChatMembers(ChatMembers { members, .. })) => {
+                    if members.is_empty() {
                         break;
                     }
+                    group_members
+                        .extend(members.iter().filter_map(|m| serde_json::to_value(m).ok()));
                 }
                 // {"@type":"error","code":400,"message":"Member list is inaccessible","@extra":"1"}
                 Err(err) if err.code == 400 => break,
@@ -474,7 +428,7 @@ impl Client {
             }
 
             let tdlib_rs::enums::Messages::Messages(batch) = tokio::time::timeout(
-                std::time::Duration::from_secs(5),
+                std::time::Duration::from_secs(10),
                 tdlib_rs::functions::get_chat_history(
                     chat_id,
                     from_msg_id.unwrap_or(0),
@@ -486,7 +440,7 @@ impl Client {
             )
             .await
             .map_err(|_| miette!("Request timed out for chat_id: {chat_id}"))?
-            .map_err(|e| miette!("Failed get get chat history: {}", e.message))?;
+            .map_err(|e| miette!("Failed to get chat history: {}", e.message))?;
 
             let batch: Vec<Message> = batch.messages.into_iter().flatten().collect();
 
