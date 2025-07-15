@@ -62,6 +62,7 @@ async-stream = "0.3.6"
 keyring = "2.3"
 rand = "0.8"
 hex = "0.4"
+url = { version = "2.5.4", default-features = false }
 
 [build-dependencies]
 tdlib-rs = { version = "1.1.0", features = ["download-tdlib"] }

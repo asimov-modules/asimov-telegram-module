@@ -141,9 +141,9 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "asimov-env"
-version = "25.0.0-dev.13"
+version = "25.0.0-dev.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df0f4e9abe9ba122b6c880f0022bcdd5fb80e1ee8b9770e8c78731707c64d136"
+checksum = "7f65778ee204913244ae3bc3e954e28c546a6fd73a68ebe541adbc6246ce7c9b"
 dependencies = [
  "cap-directories",
  "cap-std",
@@ -153,7 +153,7 @@ dependencies = [
 
 [[package]]
 name = "asimov-module"
-version = "25.0.0-dev.13"
+version = "25.0.0-dev.14"
 dependencies = [
  "asimov-env",
  "clientele",
@@ -190,6 +190,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]
@@ -524,7 +525,7 @@ dependencies = [
  "cap-std",
  "directories-next",
  "rustix 1.0.7",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -541,7 +542,7 @@ dependencies = [
  "maybe-owned",
  "rustix 1.0.7",
  "rustix-linux-procfs",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
  "winx",
 ]
 
@@ -1110,7 +1111,7 @@ checksum = "94e7099f6313ecacbe1256e8ff9d617b75d1bcb16a6fddef94866d225a01a14a"
 dependencies = [
  "io-lifetimes 2.0.4",
  "rustix 1.0.7",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1682,7 +1683,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2285ddfe3054097ef4b2fe909ef8c3bcd1ea52a8f0d274416caebeef39f04a65"
 dependencies = [
  "io-lifetimes 2.0.4",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3917,7 +3918,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f3fd376f71958b862e7afb20cfe5a22830e1963462f3a17f49d82a6c1d1f42d"
 dependencies = [
  "bitflags 2.9.1",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

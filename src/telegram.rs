@@ -13,6 +13,7 @@ use std::{
     vec,
     vec::Vec,
 };
+use tdlib_rs::types::Message;
 use tokio::sync::RwLock;
 
 // Have to do this manually. If you use tdlib-rs's provided
@@ -291,81 +292,70 @@ impl Client {
         Ok(chats.clone())
     }
 
-    pub async fn get_basicgroups(&self) -> Result<BTreeMap<i64, Value>> {
+    pub async fn get_chat_info(&self, chat_id: i64) -> Result<Value> {
+        assert!(matches!(*self.state.read().await, State::Authorized { .. }));
+
+        self.load_chats().await.context("Failed to load chats")?;
+
+        let State::Authorized { ref chats, .. } = *self.state.read().await else {
+            return Ok(Default::default());
+        };
+
+        chats
+            .get(&chat_id)
+            .cloned()
+            .ok_or(miette!("Unknown chat ID: {chat_id}"))
+    }
+
+    pub async fn get_chat_members(&self, chat_id: i64, limit: Option<usize>) -> Result<Vec<Value>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
         self.load_chats().await.context("Failed to load chats")?;
 
         let State::Authorized {
-            ref basicgroups, ..
+            ref chats,
+            ref users,
+            ..
         } = *self.state.read().await
         else {
             return Ok(Default::default());
         };
 
-        Ok(basicgroups.clone())
-    }
+        let chat = chats
+            .get(&chat_id)
+            .ok_or(miette!("Unknown chat ID: {chat_id}"))?;
 
-    pub async fn get_supergroups(&self) -> Result<BTreeMap<i64, Value>> {
-        assert!(matches!(*self.state.read().await, State::Authorized { .. }));
-
-        self.load_chats().await.context("Failed to load chats")?;
-
-        let State::Authorized {
-            ref supergroups, ..
-        } = *self.state.read().await
-        else {
-            return Ok(Default::default());
+        use tdlib_rs::{
+            enums::ChatType::*,
+            types::Chat,
+            types::{ChatTypeBasicGroup, ChatTypePrivate, ChatTypeSecret, ChatTypeSupergroup},
         };
 
-        Ok(supergroups.clone())
-    }
+        let chat: Chat = serde_json::from_value(chat.clone()).unwrap();
 
-    pub async fn get_group_members(
-        &self,
-        max_per_group: Option<usize>,
-    ) -> Result<BTreeMap<i64, Vec<Value>>> {
-        assert!(matches!(*self.state.read().await, State::Authorized { .. }));
-
-        self.load_chats().await.context("Failed to load chats")?;
-
-        let (basicgroups, supergroups) = {
-            let State::Authorized {
-                ref basicgroups,
-                ref supergroups,
-                ..
-            } = *self.state.read().await
-            else {
-                return Ok(Default::default());
-            };
-            (
-                basicgroups.keys().cloned().collect::<Vec<_>>(),
-                supergroups.keys().cloned().collect::<Vec<_>>(),
-            )
-        };
-
-        let mut members: BTreeMap<i64, Vec<Value>> = BTreeMap::new();
-
-        for id in basicgroups {
-            let group_members = self.get_basicgroup_members(id).await?;
-            members.entry(id).or_default().extend(group_members);
+        match chat.r#type {
+            BasicGroup(ChatTypeBasicGroup { basic_group_id }) => {
+                let members = self.get_basicgroup_members(basic_group_id).await?;
+                if let Some(limit) = limit
+                    && let Some((left, _right)) = members.split_at_checked(limit)
+                {
+                    Ok(left.into())
+                } else {
+                    Ok(members)
+                }
+            }
+            Supergroup(ChatTypeSupergroup { supergroup_id, .. }) => {
+                self.get_supergroup_members(supergroup_id, limit).await
+            }
+            Private(ChatTypePrivate { user_id }) | Secret(ChatTypeSecret { user_id, .. }) => {
+                Ok(vec![
+                    users
+                        .get(&user_id)
+                        .cloned()
+                        .ok_or_else(|| miette!("Unknown user ID: {user_id}"))?,
+                ])
+            }
         }
-
-        for id in supergroups {
-            let tdlib_rs::enums::SupergroupFullInfo::SupergroupFullInfo(info) =
-                tdlib_rs::functions::get_supergroup_full_info(id, self.handle.0)
-                    .await
-                    .map_err(|e| miette!(e.message))?;
-
-            if !info.can_get_members {
-                continue;
-            };
-
-            let group_members = self.get_supergroup_members(id, max_per_group).await?;
-            members.entry(id).or_default().extend(group_members);
-        }
-
-        Ok(members)
     }
 
     pub async fn get_basicgroup_members(&self, basicgroup_id: i64) -> Result<Vec<Value>> {
@@ -424,16 +414,13 @@ impl Client {
         Ok(group_members)
     }
 
-    pub async fn get_users(&self) -> Result<BTreeMap<i64, Value>> {
+    pub async fn get_user(&self, user_id: i64) -> Result<Value> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
 
-        self.load_chats().await.context("Failed to load chats")?;
-
-        let State::Authorized { ref users, .. } = *self.state.read().await else {
-            return Ok(Default::default());
-        };
-
-        Ok(users.clone())
+        tdlib_rs::functions::get_user(user_id, self.handle.0)
+            .await
+            .map_err(|e| miette!("Failed to get user: {}", e.message))
+            .and_then(|user| serde_json::to_value(user).into_diagnostic())
     }
 
     async fn load_chats(&self) -> Result<()> {
@@ -458,159 +445,59 @@ impl Client {
         Ok(())
     }
 
-    async fn get_chat_history(
+    pub async fn get_chat_history(
         &self,
         chat_id: i64,
-        from_message_id: i64,
-        limit: i32,
-    ) -> Result<Vec<Value>> {
+        from_message_id: Option<i64>,
+        limit: Option<usize>,
+    ) -> Result<Vec<Message>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
-        if !(1..=100).contains(&limit) {
-            bail!("Limit must be between 1 and 100");
-        }
 
-        let state = self.state.read().await;
-        if let State::Authorized { ref chats, .. } = *state
+        self.load_chats().await.context("Failed to load chats")?;
+
+        if let State::Authorized { ref chats, .. } = *self.state.read().await
             && !chats.contains_key(&chat_id)
         {
             bail!("Chat ID {} not found", chat_id);
         }
 
-        tracing::debug!(chat_id, from_message_id, limit, "Fetching chat history");
+        let mut msgs = Vec::new();
+        let mut from_msg_id = from_message_id;
 
-        let res = tokio::time::timeout(
-            std::time::Duration::from_secs(60),
-            tdlib_rs::functions::get_chat_history(
-                chat_id,
-                from_message_id,
-                0,
-                limit,
-                false,
-                self.handle.0,
-            ),
-        )
-        .await
-        .map_err(|_| miette!("Request timed out after 60 seconds for chat_id: {chat_id}",))?;
-
-        let messages = match res {
-            Ok(tdlib_rs::enums::Messages::Messages(messages)) => messages
-                .messages
-                .into_iter()
-                .filter_map(|msg| {
-                    serde_json::to_value(msg)
-                        .inspect_err(|e| tracing::warn!(error=%e, "Failed to serialize message"))
-                        .ok()
-                })
-                .collect::<Vec<Value>>(),
-            Err(e) => bail!("Failed to get chat history: {}", e.message),
-        };
-
-        tracing::debug!(
-            chat_id,
-            message_count = messages.len(),
-            "Received chat history"
-        );
-
-        Ok(messages)
-    }
-
-    pub fn all_messages_stream(
-        self: Arc<Self>,
-    ) -> impl Stream<Item = Result<Value>> + Send + 'static {
-        try_stream! {
-            let chat_ids = match self.get_chat_ids().await {
-                Ok(ids) => {
-                    tracing::debug!(chat_count=ids.len(), "Starting message stream for chats");
-                    ids.into_iter().collect::<Vec<i64>>()
-                }
-                Err(e) => {
-                    tracing::error!(error=%e, "Failed to get chat IDs");
-                    vec![]
-                }
+        loop {
+            let limit = if let Some(limit) = limit {
+                limit.saturating_sub(msgs.len()).min(100)
+            } else {
+                100
             };
-            tracing::debug!(chat_ids=chat_ids.len(), "Chat IDs to process");
-
-            for chat_id in chat_ids {
-                tracing::debug!(chat_id, "Processing chat");
-                let mut from_msg_id = 0;
-                let mut prev_msg_id = 0;
-                let mut attempts = 0;
-                const MAX_ATTEMPTS: usize = 3;
-
-                loop {
-                    let result = tokio::time::timeout(
-                        std::time::Duration::from_secs(60),
-                        self.get_chat_history(chat_id, from_msg_id, 100),
-                    )
-                    .await;
-
-                    let messages = match result {
-                        Ok(Ok(msgs)) => {
-                            attempts = 0;
-                            msgs
-                        },
-                        Ok(Err(e)) => {
-                            attempts += 1;
-                            let backoff = std::time::Duration::from_secs(2u64.pow(attempts as u32));
-                            tracing::warn!(
-                                %chat_id,
-                                error=%e,
-                                attempts,
-                                backoff_ms=backoff.as_millis(),
-                                "Error fetching messages, retrying after backoff"
-                            );
-                            if attempts >= MAX_ATTEMPTS {
-                                tracing::warn!(%chat_id, "Max attempts reached, skipping chat");
-                                break;
-                            }
-                            tokio::time::sleep(backoff).await;
-                            continue;
-                        },
-                        Err(_) => {
-                            attempts += 1;
-                            let backoff = std::time::Duration::from_secs(2u64.pow(attempts as u32));
-                            tracing::warn!(
-                                %chat_id,
-                                attempts,
-                                backoff_ms=backoff.as_millis(),
-                                "Timeout fetching messages, retrying after backoff"
-                            );
-                            if attempts >= MAX_ATTEMPTS {
-                                tracing::warn!(%chat_id, "Max attempts reached, skipping chat");
-                                break;
-                            }
-                            tokio::time::sleep(backoff).await;
-                            continue;
-                        },
-                    };
-
-                    tracing::debug!(chat_id, message_count=messages.len(), "Received messages");
-
-                    if messages.is_empty() {
-                        tracing::debug!(chat_id, "No more messages in chat");
-                        break;
-                    }
-
-                    let last_msg_id = messages
-                        .last()
-                        .and_then(|m| m["id"].as_i64())
-                        .unwrap_or(0);
-                    tracing::debug!(chat_id, last_msg_id, "Last message ID");
-
-                    for msg in messages {
-                        yield msg;
-                    }
-
-                    if last_msg_id == 0 || last_msg_id == from_msg_id || last_msg_id == prev_msg_id {
-                        tracing::debug!(chat_id, last_msg_id, from_msg_id, prev_msg_id, "Stopping chat message loop");
-                        break;
-                    }
-
-                    prev_msg_id = from_msg_id;
-                    from_msg_id = last_msg_id;
-                }
+            if limit == 0 {
+                break;
             }
+            let tdlib_rs::enums::Messages::Messages(batch) = tokio::time::timeout(
+                std::time::Duration::from_secs(60),
+                tdlib_rs::functions::get_chat_history(
+                    chat_id,
+                    from_message_id.unwrap_or(0),
+                    0,
+                    limit as i32,
+                    false,
+                    self.handle.0,
+                ),
+            )
+            .await
+            .map_err(|_| miette!("Request timed out for chat_id: {chat_id}"))?
+            .map_err(|e| miette!("Failed get get chat history: {}", e.message))?;
+
+            let batch: Vec<Message> = batch.messages.into_iter().flatten().collect();
+
+            if from_msg_id.is_none() {
+                from_msg_id = batch.iter().map(|m| m.id).min();
+            }
+
+            msgs.extend_from_slice(&batch);
         }
+
+        Ok(msgs)
     }
 }
 
