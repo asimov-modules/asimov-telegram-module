@@ -8,6 +8,7 @@ use clientele::{
     crates::clap::{self, Parser},
 };
 use miette::{IntoDiagnostic, Result, miette};
+use serde_json::Value;
 use std::sync::Arc;
 
 #[derive(Debug, Parser)]
@@ -83,11 +84,21 @@ async fn main() -> Result<SysexitsError> {
 
     let filter = asimov_telegram_module::jq::filter();
 
+    let print = |v: &Value| -> Result<()> {
+        if cfg!(feature = "pretty") {
+            colored_json::write_colored_json(&v, &mut std::io::stdout()).into_diagnostic()?;
+            println!();
+        } else {
+            println!("{v}");
+        }
+        Ok(())
+    };
+
     match parse_fetch_url(&options.resource)? {
         FetchTarget::Chat { chat_id } => {
             let info = client.get_chat_info(chat_id).await?;
             match filter.filter_json(info) {
-                Ok(filtered) => println!("{filtered}"),
+                Ok(filtered) => print(&filtered)?,
                 Err(jq::JsonFilterError::NoOutput) => (),
                 Err(err) => tracing::error!(?err, "Filter failed"),
             }
@@ -96,7 +107,7 @@ async fn main() -> Result<SysexitsError> {
             let users = client.get_chat_members(chat_id, options.limit).await?;
             for user in users {
                 match filter.filter_json(user) {
-                    Ok(filtered) => println!("{filtered}"),
+                    Ok(filtered) => print(&filtered)?,
                     Err(jq::JsonFilterError::NoOutput) => (),
                     Err(err) => tracing::error!(?err, "Filter failed"),
                 }
@@ -110,7 +121,7 @@ async fn main() -> Result<SysexitsError> {
             for msg in msgs {
                 let msg = serde_json::to_value(msg).into_diagnostic()?;
                 match filter.filter_json(msg) {
-                    Ok(filtered) => println!("{filtered}"),
+                    Ok(filtered) => print(&filtered)?,
                     Err(jq::JsonFilterError::NoOutput) => (),
                     Err(err) => tracing::error!(?err, "Filter failed"),
                 }
@@ -119,7 +130,7 @@ async fn main() -> Result<SysexitsError> {
         FetchTarget::UserInfo { user_id } => {
             let user = client.get_user(user_id).await?;
             match filter.filter_json(user) {
-                Ok(filtered) => println!("{filtered}"),
+                Ok(filtered) => print(&filtered)?,
                 Err(jq::JsonFilterError::NoOutput) => (),
                 Err(err) => tracing::error!(?err, "Filter failed"),
             }
