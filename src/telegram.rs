@@ -448,9 +448,10 @@ impl Client {
                 break;
             }
 
-            if from_msg_id.is_none() {
-                from_msg_id = batch.iter().map(|m| m.id).min();
-            }
+            from_msg_id = from_msg_id
+                .into_iter()
+                .chain(batch.iter().map(|m| m.id))
+                .min();
 
             msgs.extend_from_slice(&batch);
         }
