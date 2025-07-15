@@ -370,11 +370,11 @@ impl Client {
     pub async fn get_supergroup_members(
         &self,
         supergroup_id: i64,
-        max_amount: Option<usize>,
+        limit: Option<usize>,
     ) -> Result<Vec<Value>> {
         let mut group_members = Vec::new();
         loop {
-            let limit = if let Some(max) = max_amount {
+            let limit = if let Some(max) = limit {
                 max.saturating_sub(group_members.len()).min(200)
             } else {
                 200
@@ -447,7 +447,7 @@ impl Client {
     pub async fn get_chat_history(
         &self,
         chat_id: i64,
-        from_message_id: Option<i64>,
+        from_msg_id: Option<i64>,
         limit: Option<usize>,
     ) -> Result<Vec<Message>> {
         assert!(matches!(*self.state.read().await, State::Authorized { .. }));
@@ -461,7 +461,7 @@ impl Client {
         }
 
         let mut msgs = Vec::new();
-        let mut from_msg_id = from_message_id;
+        let mut from_msg_id = from_msg_id;
 
         loop {
             let limit = if let Some(limit) = limit {
@@ -472,11 +472,12 @@ impl Client {
             if limit == 0 {
                 break;
             }
+
             let tdlib_rs::enums::Messages::Messages(batch) = tokio::time::timeout(
-                std::time::Duration::from_secs(60),
+                std::time::Duration::from_secs(5),
                 tdlib_rs::functions::get_chat_history(
                     chat_id,
-                    from_message_id.unwrap_or(0),
+                    from_msg_id.unwrap_or(0),
                     0,
                     limit as i32,
                     false,
@@ -488,6 +489,10 @@ impl Client {
             .map_err(|e| miette!("Failed get get chat history: {}", e.message))?;
 
             let batch: Vec<Message> = batch.messages.into_iter().flatten().collect();
+
+            if batch.is_empty() {
+                break;
+            }
 
             if from_msg_id.is_none() {
                 from_msg_id = batch.iter().map(|m| m.id).min();
