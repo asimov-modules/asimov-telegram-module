@@ -154,6 +154,8 @@ dependencies = [
 [[package]]
 name = "asimov-module"
 version = "25.0.0-dev.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "790f0315926906a7b2f30443fdea20d55e80209f8a1ad17f754d965ef657cc84"
 dependencies = [
  "asimov-env",
  "clientele",

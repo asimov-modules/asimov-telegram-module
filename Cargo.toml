@@ -30,7 +30,7 @@ std = [
 unstable = []
 
 [dependencies]
-asimov-module = { version = "25.0.0-dev.13" }
+asimov-module = { version = "25.0.0-dev.14" }
 clientele = { version = "0.3.8", default-features = false, features = [
 	"all",
 	"clap",
@@ -71,9 +71,6 @@ tdlib-rs = { version = "1.1.0", features = ["download-tdlib"] }
 opt-level = "z"
 strip = true
 lto = "thin"
-
-[patch.crates-io]
-asimov-module = { path = "../asimov.rs/lib/asimov-module/" }
 
 [[bin]]
 name = "asimov-telegram-cataloger"

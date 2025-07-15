@@ -1,7 +1,5 @@
 // This is free and unencumbered software released into the public domain.
 
-use async_stream::try_stream;
-use futures::Stream;
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use serde_json::Value;
 use std::{
