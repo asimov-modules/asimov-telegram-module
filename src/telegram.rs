@@ -11,7 +11,10 @@ use std::{
     vec,
     vec::Vec,
 };
-use tdlib_rs::types::Message;
+use tdlib_rs::{
+    enums::MessageSender,
+    types::{Message, MessageSenderUser},
+};
 use tokio::sync::RwLock;
 
 // Have to do this manually. If you use tdlib-rs's provided
@@ -310,12 +313,7 @@ impl Client {
 
         self.load_chats().await.context("Failed to load chats")?;
 
-        let State::Authorized {
-            ref chats,
-            ref users,
-            ..
-        } = *self.state.read().await
-        else {
+        let State::Authorized { ref chats, .. } = *self.state.read().await else {
             return Ok(Default::default());
         };
 
@@ -346,12 +344,15 @@ impl Client {
                 self.get_supergroup_members(supergroup_id, limit).await
             }
             Private(ChatTypePrivate { user_id }) | Secret(ChatTypeSecret { user_id, .. }) => {
-                Ok(vec![
-                    users
-                        .get(&user_id)
-                        .cloned()
-                        .ok_or_else(|| miette!("Unknown user ID: {user_id}"))?,
-                ])
+                let member = tdlib_rs::functions::get_chat_member(
+                    chat_id,
+                    MessageSender::User(MessageSenderUser { user_id }),
+                    self.handle.0,
+                )
+                .await
+                .map_err(|e| miette!("Failed to fetch chat member: {}", e.message))?;
+
+                Ok(vec![serde_json::to_value(member).into_diagnostic()?])
             }
         }
     }
