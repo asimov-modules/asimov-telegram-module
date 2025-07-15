@@ -9,7 +9,7 @@ use clientele::{
 };
 use miette::{IntoDiagnostic, Result, miette};
 use serde_json::Value;
-use std::sync::Arc;
+use std::{io::Write as _, sync::Arc};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -89,14 +89,17 @@ async fn main() -> Result<SysexitsError> {
 
     let filter = asimov_telegram_module::jq::filter();
 
-    let print = |v: &Value| -> Result<()> {
-        if cfg!(feature = "pretty") {
-            colored_json::write_colored_json(&v, &mut std::io::stdout()).into_diagnostic()?;
-            println!();
-        } else {
-            println!("{v}");
+    let mut print = {
+        let mut stdout = std::io::stdout();
+        move |v: &Value| -> Result<()> {
+            if cfg!(feature = "pretty") {
+                colored_json::write_colored_json(&v, &mut stdout).into_diagnostic()?;
+                writeln!(&mut stdout).into_diagnostic()?;
+            } else {
+                writeln!(&mut stdout, "{v}").into_diagnostic()?;
+            }
+            Ok(())
         }
-        Ok(())
     };
 
     match parse_fetch_url(&options.resource)? {

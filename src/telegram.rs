@@ -242,8 +242,6 @@ impl Client {
 
         self.load_chats().await.context("Failed to load chats")?;
 
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-
         let State::Authorized { ref chats, .. } = *self.state.read().await else {
             return Ok(Default::default());
         };

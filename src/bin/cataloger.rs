@@ -17,13 +17,13 @@ struct Options {
     #[clap(flatten)]
     flags: StandardOptions,
 
-    /// Available subjects: `chats`, `groups`, `members`, `users`
-    // #[clap(long, short, value_delimiter = ',')]
-    // subjects: Vec<String>,
+    /// The maximum number of resources to list.
+    #[arg(value_name = "COUNT", short = 'n', long)]
+    limit: Option<usize>,
 
-    /// Maximum amount of members per group to fetch.
-    #[clap(long, default_value = "200")]
-    max_members: usize,
+    /// The output format.
+    #[arg(value_name = "FORMAT", short = 'o', long)]
+    output: Option<String>,
 }
 
 #[tokio::main]
@@ -80,7 +80,11 @@ async fn main() -> Result<SysexitsError> {
 
     let filter = asimov_telegram_module::jq::filter();
 
-    let chats = client.get_chats().await?;
+    let chats = client
+        .get_chats()
+        .await?
+        .into_iter()
+        .take(options.limit.unwrap_or(usize::MAX));
     for (_id, chat) in chats {
         match filter.filter_json(chat) {
             Ok(filtered) => {
