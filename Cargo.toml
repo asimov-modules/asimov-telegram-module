@@ -83,5 +83,5 @@ name = "asimov-telegram-configurator"
 path = "src/bin/configurator.rs"
 
 [[bin]]
-name = "asimov-telegram-importer"
-path = "src/bin/importer.rs"
+name = "asimov-telegram-fetcher"
+path = "src/bin/fetcher.rs"

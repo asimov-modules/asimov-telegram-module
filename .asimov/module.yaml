@@ -16,7 +16,7 @@ provides:
   programs:
     - asimov-telegram-cataloger
     - asimov-telegram-configurator
-    - asimov-telegram-importer
+    - asimov-telegram-fetcher
 handles:
   url_protocols:
     - tg

@@ -13,8 +13,8 @@ use std::{io::Write as _, sync::Arc};
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "asimov-telegram-importer",
-    long_about = "ASIMOV Telegram Importer"
+    name = "asimov-telegram-fetcher",
+    long_about = "ASIMOV Telegram Fetcher"
 )]
 struct Options {
     #[clap(flatten)]
@@ -52,7 +52,7 @@ async fn main() -> Result<SysexitsError> {
     asimov_module::init_tracing_subscriber(&options.flags).expect("failed to initialize logging");
 
     if options.flags.version {
-        println!("asimov-telegram-importer {}", env!("CARGO_PKG_VERSION"));
+        println!("asimov-telegram-fetcher {}", env!("CARGO_PKG_VERSION"));
         return Ok(EX_OK);
     }
 

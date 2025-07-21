@@ -29,9 +29,9 @@ $ asimov-telegram-cataloger
 ```
 
 ```console
-$ asimov-telegram-importer send-code "+1234567890"
-$ asimov-telegram-importer verify-code "12345"
-$ asimov-telegram-importer
+$ asimov-telegram-fetcher send-code "+1234567890"
+$ asimov-telegram-fetcher verify-code "12345"
+$ asimov-telegram-fetcher
 ```
 
 ## 👨‍💻 Development
