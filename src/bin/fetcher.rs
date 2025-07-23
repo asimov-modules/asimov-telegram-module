@@ -7,6 +7,7 @@ use clientele::{
     SysexitsError::{self, *},
     crates::clap::{self, Parser},
 };
+use futures::StreamExt;
 use miette::{IntoDiagnostic, Result, miette};
 use serde_json::Value;
 use std::{io::Write as _, sync::Arc};
@@ -112,8 +113,13 @@ async fn main() -> Result<SysexitsError> {
             }
         }
         FetchTarget::ChatMembers { chat_id } => {
-            let users = client.get_chat_members(chat_id, options.limit).await?;
-            for user in users {
+            let mut users = client
+                .get_chat_members(chat_id, options.limit)
+                .await?
+                .boxed();
+
+            while let Some(user) = users.next().await {
+                let user = user?;
                 match filter.filter_json(user) {
                     Ok(filtered) => print(&filtered)?,
                     Err(jq::JsonFilterError::NoOutput) => (),
@@ -122,12 +128,13 @@ async fn main() -> Result<SysexitsError> {
             }
         }
         FetchTarget::ChatMessages { chat_id } => {
-            let msgs = client
+            let mut msgs = client
                 .get_chat_history(chat_id, None, options.limit)
-                .await?;
+                .await?
+                .boxed();
 
-            for msg in msgs {
-                let msg = serde_json::to_value(msg).into_diagnostic()?;
+            while let Some(msg) = msgs.next().await {
+                let msg = serde_json::to_value(msg?).into_diagnostic()?;
                 match filter.filter_json(msg) {
                     Ok(filtered) => print(&filtered)?,
                     Err(jq::JsonFilterError::NoOutput) => (),
