@@ -244,7 +244,7 @@ mod tests {
                 (FetchTarget::UserInfo { user_id: a }, FetchTarget::UserInfo { user_id: b }) => {
                     assert_eq!(a, b)
                 }
-                _ => panic!("Unexpected target type for URL: {}", url),
+                _ => panic!("Unexpected target type for URL: {url}"),
             }
         }
 

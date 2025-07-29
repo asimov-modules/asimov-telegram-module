@@ -23,7 +23,7 @@ fn ask(prompt: &str) -> String {
     let mut lines = std::io::stdin().lock().lines();
 
     loop {
-        write!(&mut stdout, "{}", prompt).unwrap();
+        write!(&mut stdout, "{prompt}").unwrap();
         stdout.flush().unwrap();
         if let Some(Ok(password)) = lines.next()
             && !password.is_empty()
