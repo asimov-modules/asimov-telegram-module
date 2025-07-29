@@ -7,23 +7,30 @@ use clientele::{
     SysexitsError::{self, *},
     crates::clap::{self, Parser},
 };
-use miette::{IntoDiagnostic, Result, miette};
-// use oxrdf::{Literal, NamedNode, Triple};
+use miette::{Result, miette};
+use std::io::{BufRead, Write};
 
-/// ASIMOV Telegram Cataloger
+/// ASIMOV Telegram Configurator
 #[derive(Debug, Parser)]
-#[command(name = "asimov-telegram-cataloger", long_about)]
+#[command(name = "asimov-telegram-configurator", long_about)]
 struct Options {
     #[clap(flatten)]
     flags: StandardOptions,
+}
 
-    /// The maximum number of resources to list.
-    #[arg(value_name = "COUNT", short = 'n', long)]
-    limit: Option<usize>,
+fn ask(prompt: &str) -> String {
+    let mut stdout = std::io::stdout().lock();
+    let mut lines = std::io::stdin().lock().lines();
 
-    /// The output format.
-    #[arg(value_name = "FORMAT", short = 'o', long)]
-    output: Option<String>,
+    loop {
+        write!(&mut stdout, "{}", prompt).unwrap();
+        stdout.flush().unwrap();
+        if let Some(Ok(password)) = lines.next()
+            && !password.is_empty()
+        {
+            break password;
+        }
+    }
 }
 
 #[tokio::main]
@@ -74,31 +81,39 @@ async fn main() -> Result<SysexitsError> {
 
     let client = Client::new(config).unwrap().init().await.unwrap();
 
-    if !client.is_authorised().await {
-        return Err(miette!("Unauthorized. Run `asimov module config telegram`"));
+    if client.is_authorised().await {
+        return Ok(EX_OK);
     }
 
-    let filter = asimov_telegram_module::jq::filter();
+    if !client.is_need_code().await {
+        let phone = ask("Enter phone: ");
+        client.send_auth_request(&phone).await?;
+    }
 
-    let chats = client
-        .get_chats()
-        .await?
-        .into_iter()
-        .take(options.limit.unwrap_or(usize::MAX));
-    for (_id, chat) in chats {
-        match filter.filter_json(chat) {
-            Ok(filtered) => {
-                if cfg!(feature = "pretty") {
-                    colored_json::write_colored_json(&filtered, &mut std::io::stdout())
-                        .into_diagnostic()?;
-                    println!();
-                } else {
-                    println!("{filtered}");
-                }
+    let code = ask("Enter code: ");
+    client.send_auth_code(&code).await?;
+
+    let mut password_hint = String::new();
+    while client.is_need_password(&mut password_hint).await {
+        let password = ask("Enter password: ");
+        match client.send_auth_password(&password).await {
+            Ok(_) => break,
+            Err(e) if e.message == "PASSWORD_HASH_INVALID" => {
+                println!("Invalid password, try again please.");
+                continue;
             }
-            Err(jq::JsonFilterError::NoOutput) => (),
-            Err(err) => tracing::error!(?err),
+            Err(e) => {
+                return Err(miette!(
+                    "Failed to confirm authentication password: {}",
+                    e.message
+                ));
+            }
         }
+    }
+
+    if !client.is_authorised().await {
+        // TODO: improve
+        return Err(miette!("Something went wrong, still unauthorized"));
     }
 
     Ok(EX_OK)

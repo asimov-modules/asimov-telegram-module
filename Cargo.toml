@@ -17,8 +17,9 @@ categories = ["command-line-utilities", "text-processing"]
 publish = true
 
 [features]
-default = ["all", "std"]
+default = ["all", "std", "pretty"]
 all = []
+pretty = ["dep:colored_json"]
 std = [
 	"asimov-module/std",
 	"clientele/std",
@@ -30,7 +31,7 @@ std = [
 unstable = []
 
 [dependencies]
-asimov-module = { version = "25.0.0-dev.13" }
+asimov-module = { version = "25.0.0-dev.14" }
 clientele = { version = "0.3.8", default-features = false, features = [
 	"all",
 	"clap",
@@ -62,6 +63,11 @@ async-stream = "0.3.6"
 keyring = "2.3"
 rand = "0.8"
 hex = "0.4"
+url = { version = "2.5.4", default-features = false }
+colored_json = { version = "5", optional = true }
+
+[build-dependencies]
+tdlib-rs = { version = "1.1.0", features = ["download-tdlib"] }
 
 [profile.release]
 opt-level = "z"
@@ -73,5 +79,9 @@ name = "asimov-telegram-cataloger"
 path = "src/bin/cataloger.rs"
 
 [[bin]]
-name = "asimov-telegram-importer"
-path = "src/bin/importer.rs"
+name = "asimov-telegram-configurator"
+path = "src/bin/configurator.rs"
+
+[[bin]]
+name = "asimov-telegram-fetcher"
+path = "src/bin/fetcher.rs"
