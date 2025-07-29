@@ -7,7 +7,7 @@ use clientele::{
     SysexitsError::{self, *},
     crates::clap::{self, Parser},
 };
-use miette::{IntoDiagnostic, Result, miette};
+use miette::{Result, miette};
 // use oxrdf::{Literal, NamedNode, Triple};
 
 /// ASIMOV Telegram Cataloger
@@ -87,15 +87,7 @@ async fn main() -> Result<SysexitsError> {
         .take(options.limit.unwrap_or(usize::MAX));
     for (_id, chat) in chats {
         match filter.filter_json(chat) {
-            Ok(filtered) => {
-                if cfg!(feature = "pretty") {
-                    colored_json::write_colored_json(&filtered, &mut std::io::stdout())
-                        .into_diagnostic()?;
-                    println!();
-                } else {
-                    println!("{filtered}");
-                }
-            }
+            Ok(filtered) => println!("{filtered}"),
             Err(jq::JsonFilterError::NoOutput) => (),
             Err(err) => tracing::error!(?err),
         }

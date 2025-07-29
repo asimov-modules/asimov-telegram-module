@@ -17,9 +17,8 @@ categories = ["command-line-utilities", "text-processing"]
 publish = true
 
 [features]
-default = ["all", "std", "pretty"]
+default = ["all", "std"]
 all = []
-pretty = ["dep:colored_json"]
 std = [
 	"asimov-module/std",
 	"clientele/std",
@@ -64,7 +63,6 @@ keyring = "2.3"
 rand = "0.8"
 hex = "0.4"
 url = { version = "2.5.4", default-features = false }
-colored_json = { version = "5", optional = true }
 
 [build-dependencies]
 tdlib-rs = { version = "1.1.0", features = ["download-tdlib"] }
