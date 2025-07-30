@@ -64,6 +64,9 @@ rand = "0.8"
 hex = "0.4"
 url = { version = "2.5.4", default-features = false }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
+
 [build-dependencies]
 tdlib-rs = { version = "1.1.0", features = ["download-tdlib"] }
 
