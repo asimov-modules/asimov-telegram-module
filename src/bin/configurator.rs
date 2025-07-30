@@ -10,6 +10,8 @@ use clientele::{
 use miette::{Result, miette};
 use std::io::{BufRead, Write};
 
+use asimov_telegram_module::shared;
+
 /// ASIMOV Telegram Configurator
 #[derive(Debug, Parser)]
 #[command(name = "asimov-telegram-configurator", long_about)]
@@ -54,14 +56,7 @@ async fn main() -> Result<SysexitsError> {
         return Ok(EX_OK);
     }
 
-    let Some(data_dir) =
-        clientele::paths::xdg_data_home().map(|p| p.join("asimov-telegram-module"))
-    else {
-        return Err(miette!(
-            "Unable to determine a directory for data. Neither $XDG_DATA_HOME nor $HOME available."
-        ));
-    };
-
+    let data_dir = shared::get_data_dir()?;
     let manifest = ModuleManifest::read_manifest("telegram").unwrap();
 
     let api_id = manifest
