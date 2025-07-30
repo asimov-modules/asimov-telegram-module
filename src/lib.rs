@@ -6,4 +6,5 @@
 extern crate std;
 
 pub mod jq;
+pub mod shared;
 pub mod telegram;
