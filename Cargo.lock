@@ -183,6 +183,7 @@ dependencies = [
  "jq",
  "keyring",
  "miette",
+ "openssl",
  "oxrdf",
  "oxrdfio",
  "rand",
@@ -2190,6 +2191,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
 
 [[package]]
+name = "openssl-src"
+version = "300.5.0+3.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8ce546f549326b0e6052b649198487d91320875da901e7bd11a06d1ee3f9c2f"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "openssl-sys"
 version = "0.9.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2197,6 +2207,7 @@ checksum = "90096e2e47630d78b7d1c20952dc621f957103f8bc2c8359ec81290d75238571"
 dependencies = [
  "cc",
  "libc",
+ "openssl-src",
  "pkg-config",
  "vcpkg",
 ]
@@ -3085,8 +3096,7 @@ dependencies = [
 [[package]]
 name = "tdlib-rs"
 version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f98c960258301bee0758a669fbe12ad8a97c6e764d2f30c5426eea008eebf2d2"
+source = "git+https://github.com/asimov-platform/tdlib-rs#e2a8e8222db374481865e025770f876294bc4445"
 dependencies = [
  "dirs",
  "futures-channel",
@@ -3104,8 +3114,7 @@ dependencies = [
 [[package]]
 name = "tdlib-rs-gen"
 version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be6a2373951794ddcf612db2cd26fc67d9fb2721a1497e873c06bd87823fae80"
+source = "git+https://github.com/asimov-platform/tdlib-rs#e2a8e8222db374481865e025770f876294bc4445"
 dependencies = [
  "tdlib-rs-parser",
 ]
@@ -3113,8 +3122,7 @@ dependencies = [
 [[package]]
 name = "tdlib-rs-parser"
 version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87cbdfae498e57fb48d380fff8eb5c9c98d4497c998f6de0d30d5d6b12f5358b"
+source = "git+https://github.com/asimov-platform/tdlib-rs#e2a8e8222db374481865e025770f876294bc4445"
 
 [[package]]
 name = "tempfile"
