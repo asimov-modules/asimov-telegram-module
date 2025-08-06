@@ -35,9 +35,7 @@ jobs:
       linux_dependencies: |
         echo "man-db man-db/auto-update boolean false" | sudo debconf-set-selections
         sudo rm /var/lib/man-db/auto-update
+        sudo apt-get update
         sudo apt-get install -y libc++-dev libc++abi-dev libgtk2.0-dev libatk1.0-dev libgtk-3-dev libxdo-dev
-      macos_dependencies: |
-        openssl_path=$(brew --prefix openssl@3)
-        echo $openssl_path
-        echo "$openssl_path/lib" >> $GITHUB_PATH
-        echo "OPENSSL_ROOT_DIR=$openssl_path" >> $GITHUB_ENV
+      build_windows: false
+      additional_build_args: --verbose

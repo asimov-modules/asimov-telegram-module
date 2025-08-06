@@ -24,4 +24,6 @@ jobs:
       linux_dependencies: |
         echo "man-db man-db/auto-update boolean false" | sudo debconf-set-selections
         sudo rm /var/lib/man-db/auto-update
+        sudo apt-get update
         sudo apt-get install -y libc++-dev libc++abi-dev libgtk2.0-dev libatk1.0-dev libgtk-3-dev libxdo-dev
+      build-windows: false

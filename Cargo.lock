@@ -3096,12 +3096,13 @@ dependencies = [
 [[package]]
 name = "tdlib-rs"
 version = "1.1.0"
-source = "git+https://github.com/asimov-platform/tdlib-rs#e2a8e8222db374481865e025770f876294bc4445"
+source = "git+https://github.com/asimov-platform/tdlib-rs#b02710acc5393b9452ca69e9076297be340d157d"
 dependencies = [
  "dirs",
  "futures-channel",
  "log",
  "once_cell",
+ "pkg-config",
  "reqwest",
  "serde",
  "serde_json",
@@ -3114,7 +3115,7 @@ dependencies = [
 [[package]]
 name = "tdlib-rs-gen"
 version = "1.1.0"
-source = "git+https://github.com/asimov-platform/tdlib-rs#e2a8e8222db374481865e025770f876294bc4445"
+source = "git+https://github.com/asimov-platform/tdlib-rs#b02710acc5393b9452ca69e9076297be340d157d"
 dependencies = [
  "tdlib-rs-parser",
 ]
@@ -3122,7 +3123,7 @@ dependencies = [
 [[package]]
 name = "tdlib-rs-parser"
 version = "1.1.0"
-source = "git+https://github.com/asimov-platform/tdlib-rs#e2a8e8222db374481865e025770f876294bc4445"
+source = "git+https://github.com/asimov-platform/tdlib-rs#b02710acc5393b9452ca69e9076297be340d157d"
 
 [[package]]
 name = "tempfile"
