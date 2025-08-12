@@ -73,7 +73,6 @@ openssl = { version = "0.10", features = ["vendored"] }
 [build-dependencies]
 tdlib-rs = { git = "https://github.com/asimov-platform/tdlib-rs", features = [
     "download-tdlib",
-    "static-tdjson",
 ] }
 
 [profile.release]

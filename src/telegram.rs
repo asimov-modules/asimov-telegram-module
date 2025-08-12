@@ -17,7 +17,7 @@ use tokio::sync::RwLock;
 // `tdlib_rs::functions::set_log_verbosity_level` you *will* get output on stdout because that one
 // is called *after* the client is created (and hence it gets a chance to start logging...).
 // So, to get absolutely no output from TdLib we link and call this:
-#[link(name = "tdjson")]
+#[link(name = "tdjson_static", kind = "static")]
 unsafe extern "C" {
     fn td_set_log_verbosity_level(new_verbosity_level: std::ffi::c_int);
 }
