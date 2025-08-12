@@ -141,9 +141,9 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "asimov-env"
-version = "25.0.0-dev.14"
+version = "25.0.0-dev.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f65778ee204913244ae3bc3e954e28c546a6fd73a68ebe541adbc6246ce7c9b"
+checksum = "e7416d3047e141847d53007cbf86e914254c9b217c94c3bc6ff20685def9b9ef"
 dependencies = [
  "cap-directories",
  "cap-std",
@@ -153,9 +153,9 @@ dependencies = [
 
 [[package]]
 name = "asimov-module"
-version = "25.0.0-dev.14"
+version = "25.0.0-dev.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "790f0315926906a7b2f30443fdea20d55e80209f8a1ad17f754d965ef657cc84"
+checksum = "86b66a5cca65a92cc9db2722ccb373abb6a4f42aed210d13a005296c7984f1f7"
 dependencies = [
  "asimov-env",
  "clientele",
@@ -163,7 +163,8 @@ dependencies = [
  "getenv",
  "secrecy",
  "serde",
- "serde_yml",
+ "serde_json",
+ "serde_yaml_ng",
  "slab",
  "thiserror 2.0.12",
  "tracing",
@@ -1860,16 +1861,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libyml"
-version = "0.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3302702afa434ffa30847a83305f0a69d6abd74293b6554c18ec85c7ef30c980"
-dependencies = [
- "anyhow",
- "version_check",
-]
-
-[[package]]
 name = "linux-keyutils"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2177,7 +2168,7 @@ dependencies = [
  "json-event-parser",
  "oxiri",
  "oxrdf",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -2189,7 +2180,7 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "rand 0.8.5",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -2202,7 +2193,7 @@ dependencies = [
  "oxrdf",
  "oxrdfxml",
  "oxttl",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -2215,7 +2206,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "quick-xml",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -2228,7 +2219,7 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "oxrdf",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -2881,18 +2872,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_yml"
-version = "0.0.12"
+name = "serde_yaml_ng"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59e2dd588bf1597a252c3b920e0143eb99b0f76e4e082f4c92ce34fbc9e71ddd"
+checksum = "7b4db627b98b36d4203a7b458cf3573730f2bb591b28871d916dfa9efabfd41f"
 dependencies = [
  "indexmap 2.9.0",
  "itoa",
- "libyml",
- "memchr",
  "ryu",
  "serde",
- "version_check",
+ "unsafe-libyaml",
 ]
 
 [[package]]
@@ -3469,6 +3458,12 @@ name = "unicode-width"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
+
+[[package]]
+name = "unsafe-libyaml"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "untrusted"
