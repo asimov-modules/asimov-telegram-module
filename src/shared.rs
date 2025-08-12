@@ -1,4 +1,3 @@
-use clientele::Utf8PathBuf;
 use miette::{Result, miette};
 use std::format;
 
@@ -12,7 +11,7 @@ pub fn get_data_dir() -> Result<clientele::Utf8PathBuf> {
 
     #[cfg(windows)]
     return clientele::envs::windows::appdata()
-        .map(|p| Utf8PathBuf::from(p).join(MODULE_NAME))
+        .map(|p| clientele::Utf8PathBuf::from(p).join(MODULE_NAME))
         .ok_or_else(|| {
             miette!("Unable to determine a directory for data. %APPDATA% is not available.")
         });
