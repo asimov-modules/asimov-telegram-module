@@ -20,18 +20,15 @@ cargo install asimov-telegram-module
 
 ## 👉 Examples
 
-You need to create credentials on `https://my.telegram.org/` to be able to authorize this module to access your Telegram account. Register an app such as `ASIMOV Telegram Module` and once you have your credentials set these environment variables: `export API_ID="12345"`, `export API_HASH="12345"`. The credentials are private to your account and should not be shared with others.
+You need to create credentials on `https://my.telegram.org/` to be able to authorize this module to access your Telegram account. Register an app such as `ASIMOV Telegram Module`. The credentials are private to your account and should not be shared with others.
+Then set up the module:
 
 ```console
-$ asimov-telegram-cataloger send-code "+1234567890"
-$ asimov-telegram-cataloger verify-code "12345"
-$ asimov-telegram-cataloger
-```
-
-```console
-$ asimov-telegram-fetcher send-code "+1234567890"
-$ asimov-telegram-fetcher verify-code "12345"
-$ asimov-telegram-fetcher
+$ asimov module config telegram
+$ # or directly:
+$ export API_ID="12345"
+$ export API_HASH="12345"
+$ asimov-telegram-configurator
 ```
 
 ## 👨‍💻 Development
