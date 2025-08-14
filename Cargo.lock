@@ -2168,7 +2168,7 @@ dependencies = [
  "json-event-parser",
  "oxiri",
  "oxrdf",
- "thiserror 2.0.12",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -2180,7 +2180,7 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "rand 0.8.5",
- "thiserror 2.0.12",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -2193,7 +2193,7 @@ dependencies = [
  "oxrdf",
  "oxrdfxml",
  "oxttl",
- "thiserror 2.0.12",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -2206,7 +2206,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "quick-xml",
- "thiserror 2.0.12",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -2219,7 +2219,7 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "oxrdf",
- "thiserror 2.0.12",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3058,7 +3058,7 @@ dependencies = [
 [[package]]
 name = "tdlib-rs"
 version = "1.1.0"
-source = "git+https://github.com/asimov-platform/tdlib-rs#28e31d4d105dff08c5c7f3c991a3fbe8ec9cce62"
+source = "git+https://github.com/asimov-platform/tdlib-rs#02f14cc1885b5ae2bfee287cf5fb14d59fb6b64f"
 dependencies = [
  "dirs",
  "futures-channel",
@@ -3078,7 +3078,7 @@ dependencies = [
 [[package]]
 name = "tdlib-rs-gen"
 version = "1.1.0"
-source = "git+https://github.com/asimov-platform/tdlib-rs#28e31d4d105dff08c5c7f3c991a3fbe8ec9cce62"
+source = "git+https://github.com/asimov-platform/tdlib-rs#02f14cc1885b5ae2bfee287cf5fb14d59fb6b64f"
 dependencies = [
  "tdlib-rs-parser",
 ]
@@ -3086,7 +3086,7 @@ dependencies = [
 [[package]]
 name = "tdlib-rs-parser"
 version = "1.1.0"
-source = "git+https://github.com/asimov-platform/tdlib-rs#28e31d4d105dff08c5c7f3c991a3fbe8ec9cce62"
+source = "git+https://github.com/asimov-platform/tdlib-rs#02f14cc1885b5ae2bfee287cf5fb14d59fb6b64f"
 
 [[package]]
 name = "tempfile"
