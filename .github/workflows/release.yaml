@@ -19,12 +19,13 @@ jobs:
     with:
       update_homebrew_tap: true
       update_scoop_bucket: true
-      tweet_release: false
-      rust_toolchain: "1.88.0"
+      link_old_glibc: false
       build-linux-x86-musl: false
       build-linux-arm-gnu: false
       build-linux-arm-musl: false
       build-windows-native: true
+      tweet_release: false
+      rust_toolchain: "1.88.0"
       brew_build_depends_on: |
         openssl@3
         zlib
@@ -37,6 +38,8 @@ jobs:
         vcpkg install zlib:x64-windows-static-md
         echo "OPENSSL_ROOT=$env:ProgramFiles\OpenSSL" >> $env:GITHUB_ENV
         echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+      brew_linux_x86_dependencies: |
+        sudo apt-get install -y libc++-dev libc++abi-dev
       brew_macos_x86_dependencies: |
         # https://github.com/actions/runner-images/issues/9966
         brew list -1 | grep python@ | while read formula; do
