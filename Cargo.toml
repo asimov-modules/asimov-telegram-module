@@ -66,6 +66,7 @@ keyring = "2.3"
 rand = "0.8"
 hex = "0.4"
 url = { version = "2.5.4", default-features = false }
+obfstr = "0.4.4"
 
 [build-dependencies]
 tdlib-rs = { git = "https://github.com/asimov-platform/tdlib-rs", features = [

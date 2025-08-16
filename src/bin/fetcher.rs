@@ -61,12 +61,8 @@ async fn main() -> Result<SysexitsError> {
     let data_dir = shared::get_data_dir()?;
     let manifest = ModuleManifest::read_manifest("telegram").unwrap();
 
-    let api_id = manifest
-        .variable("API_ID", None)
-        .expect("Missing API_ID. Run `asimov module config telegram`");
-    let api_hash = manifest
-        .variable("API_HASH", None)
-        .expect("Missing API_HASH. Run `asimov module config telegram`");
+    let api_id = obfstr::obfstr!(env!("ASIMOV_TELEGRAM_API_ID")).to_string();
+    let api_hash = obfstr::obfstr!(env!("ASIMOV_TELEGRAM_API_HASH")).to_string();
     let encryption_key = asimov_telegram_module::telegram::get_or_create_encryption_key()?;
 
     let config = Config {
