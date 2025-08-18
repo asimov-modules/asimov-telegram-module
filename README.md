@@ -8,30 +8,63 @@ ASIMOV module for integration with the Telegram messaging service.
 
 ## 🛠️ Prerequisites
 
-- [Rust](https://rust-lang.org) 1.85+ (2024 edition)
+- [Rust](https://rust-lang.org) 1.88+ (2024 edition)
+- [OpenSSL](https://www.openssl.org) 3.5+
+- [zlib](https://www.zlib.net) 1.3+
 
 ## ⬇️ Installation
 
+### Installation with the [ASIMOV CLI] (recommended)
+
+```bash
+asimov module install telegram -v
+```
+
 ### Installation from Source Code
+
+Make sure to follow the instructions from [development](#-development) section.
 
 ```bash
 cargo install asimov-telegram-module
 ```
 
-## 👉 Examples
+## 👉 Configuration
 
-You need to create credentials on `https://my.telegram.org/` to be able to authorize this module to access your Telegram account. Register an app such as `ASIMOV Telegram Module`. The credentials are private to your account and should not be shared with others.
-Then set up the module:
+To start using the module you need to get authorized first:
 
 ```console
-$ asimov module config telegram
-$ # or directly:
-$ export API_ID="12345"
-$ export API_HASH="12345"
-$ asimov-telegram-configurator
+asimov module config telegram
+# or directly:
+asimov-telegram-configurator
 ```
 
 ## 👨‍💻 Development
+
+While for pre-built binaries we provide our own Telegram application credentials,
+for development purposes you will have to create your own Telegram application.
+You can do this here: `https://my.telegram.org/`
+
+Then you will need to fill next environment variables:
+
+- `ASIMOV_TELEGRAM_API_ID`
+- `ASIMOV_TELEGRAM_API_HASH`
+
+Make sure that OpenSSL & zlib are installed on your system.
+
+On Windows you can install them with [vcpkg](https://github.com/microsoft/vcpkg):
+
+```bash
+vcpkg install openssl:x64-windows-static-md
+vcpkg install zlib:x64-windows-static-md
+```
+
+On Linux you also need to install the following packages:
+
+```bash
+sudo apt-get install -y libc++-dev libc++abi-dev
+```
+
+Then finally you can start development:
 
 ```bash
 git clone https://github.com/asimov-modules/asimov-telegram-module.git
@@ -39,10 +72,10 @@ git clone https://github.com/asimov-modules/asimov-telegram-module.git
 
 ### Resources
 
-- https://core.telegram.org/tdlib/getting-started
-- https://core.telegram.org/tdlib/docs/classtd_1_1td__api_1_1_function.html
-- https://core.telegram.org/tdlib/docs/classtd_1_1td__api_1_1_object.html
-- https://core.telegram.org/tdlib/docs/classes.html
+- <https://core.telegram.org/tdlib/getting-started>
+- <https://core.telegram.org/tdlib/docs/classtd_1_1td__api_1_1_function.html>
+- <https://core.telegram.org/tdlib/docs/classtd_1_1td__api_1_1_object.html>
+- <https://core.telegram.org/tdlib/docs/classes.html>
 
 ---
 
