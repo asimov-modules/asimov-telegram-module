@@ -41,3 +41,6 @@ jobs:
         vcpkg install zlib:x64-windows-static-md
         echo "OPENSSL_ROOT=$env:ProgramFiles\OpenSSL" >> $env:GITHUB_ENV
         echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+      env: |
+        ASIMOV_TELEGRAM_API_ID=123456
+        ASIMOV_TELEGRAM_API_HASH=qwerty

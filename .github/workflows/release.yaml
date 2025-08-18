@@ -9,13 +9,21 @@ on:
       - "*"
 
 jobs:
+  # Absolutely stupid fix for an insane limitation in GitHub Actions
+  # not
   build-and-release:
     name: Build and release
     uses: asimov-modules/.github/.github/workflows/build-and-release-rust-module.yaml@master
     permissions:
       contents: read
       packages: write
-    secrets: inherit
+    secrets:
+      ASIMOV_APP_ID: ${{ secrets.ASIMOV_APP_ID }}
+      ASIMOV_APP_PRIVATE_KEY: ${{ secrets.ASIMOV_APP_PRIVATE_KEY }}
+      CRATES_TOKEN: ${{ secrets.CRATES_TOKEN }}
+      ENV: |
+        ASIMOV_TELEGRAM_API_ID=${{ secrets.ASIMOV_TELEGRAM_API_ID }}
+        ASIMOV_TELEGRAM_API_HASH=${{ secrets.ASIMOV_TELEGRAM_API_HASH }}
     with:
       update_homebrew_tap: true
       update_scoop_bucket: true
