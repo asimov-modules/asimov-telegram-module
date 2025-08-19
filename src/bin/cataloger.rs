@@ -1,6 +1,5 @@
 // This is free and unencumbered software released into the public domain.
 
-use asimov_module::ModuleManifest;
 use asimov_telegram_module::telegram::{Client, Config};
 use clientele::{
     StandardOptions,
@@ -50,14 +49,8 @@ async fn main() -> Result<SysexitsError> {
     }
 
     let data_dir = shared::get_data_dir()?;
-    let manifest = ModuleManifest::read_manifest("telegram").unwrap();
-
-    let api_id = manifest
-        .variable("API_ID", None)
-        .expect("Missing API_ID. Run `asimov module config telegram`");
-    let api_hash = manifest
-        .variable("API_HASH", None)
-        .expect("Missing API_HASH. Run `asimov module config telegram`");
+    let api_id = obfstr::obfstring!(env!("ASIMOV_TELEGRAM_API_ID"));
+    let api_hash = obfstr::obfstring!(env!("ASIMOV_TELEGRAM_API_HASH"));
     let encryption_key = asimov_telegram_module::telegram::get_or_create_encryption_key()?;
 
     let config = Config {
