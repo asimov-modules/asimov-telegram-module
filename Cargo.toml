@@ -2,7 +2,7 @@
 
 [package]
 name = "asimov-telegram-module"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["ASIMOV Protocol <support@asimov.so>"]
 edition = "2024"
 #rust-version = "1.85"
@@ -20,45 +20,45 @@ publish = true
 default = ["all", "std"]
 all = []
 std = [
-	"asimov-module/std",
-	"clientele/std",
-	"serde/std",
-	"serde_json/std",
-	"tracing/std",
-	"tracing-subscriber/std",
+    "asimov-module/std",
+    "clientele/std",
+    "serde/std",
+    "serde_json/std",
+    "tracing/std",
+    "tracing-subscriber/std",
 ]
 unstable = []
 
 [dependencies]
 asimov-module = { version = "25.0.0-dev.21" }
 clientele = { version = "0.3.8", default-features = false, features = [
-	"all",
-	"clap",
-	"dotenv",
+    "all",
+    "clap",
+    "dotenv",
 ] }
 jq = { version = "0.1", default-features = false, features = ["all"] }
 miette = { version = "7.6", default-features = false, features = ["fancy"] }
 oxrdf = { version = "0.2.4", default-features = false }
 oxrdfio = { version = "0.1.8", default-features = false }
 serde = { version = "1.0", default-features = false, features = [
-	"alloc",
-	"derive",
+    "alloc",
+    "derive",
 ] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 tdlib-rs = { git = "https://github.com/asimov-platform/tdlib-rs", features = [
-	"download-tdlib",
-	"static-tdjson",
+    "download-tdlib",
+    "static-tdjson",
 ] }
 tokio = { version = "1.45", default-features = false, features = [
-	"macros",
-	"rt",
-	"rt-multi-thread",
-	"sync",
-	"time",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "time",
 ] }
 tracing = { version = "0.1.41", default-features = false }
 tracing-subscriber = { version = "0.3.19", default-features = false, features = [
-	"fmt",
+    "fmt",
 ] }
 futures = "0.3.31"
 async-stream = "0.3.6"
@@ -70,7 +70,7 @@ obfstr = "0.4.4"
 
 [build-dependencies]
 tdlib-rs = { git = "https://github.com/asimov-platform/tdlib-rs", features = [
-	"download-tdlib",
+    "download-tdlib",
 ] }
 
 [profile.release]
