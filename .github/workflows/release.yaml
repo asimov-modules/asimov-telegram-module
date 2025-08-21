@@ -24,6 +24,8 @@ jobs:
       ENV: |
         ASIMOV_TELEGRAM_API_ID=${{ secrets.ASIMOV_TELEGRAM_API_ID }}
         ASIMOV_TELEGRAM_API_HASH=${{ secrets.ASIMOV_TELEGRAM_API_HASH }}
+        HOMEBREW_ENV_VAR_ASIMOV_TELEGRAM_API_ID=${{ secrets.ASIMOV_TELEGRAM_API_ID }}
+        HOMEBREW_ENV_VAR_ASIMOV_TELEGRAM_API_HASH=${{ secrets.ASIMOV_TELEGRAM_API_HASH }}
     with:
       update_homebrew_tap: true
       update_scoop_bucket: true
