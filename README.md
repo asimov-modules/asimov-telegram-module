@@ -38,6 +38,38 @@ asimov module config telegram
 asimov-telegram-configurator
 ```
 
+## 👉 Examples
+
+### Listing Telegram chats
+
+```
+asimov-telegram-cataloger tg://chats
+```
+
+### Fetching Telegram chat info
+
+```
+asimov-telegram-fetcher tg://chats/1234567
+```
+
+### Listing Telegram chat members
+
+```
+asimov-telegram-cataloger tg://chats/1234567/members
+```
+
+### Listing Telegram chat messages
+
+```
+asimov-telegram-cataloger tg://chats/1234567/messages
+```
+
+### Fetching Telegram user info
+
+```
+asimov-telegram-fetcher tg://users/1234567
+```
+
 ## 👨‍💻 Development
 
 While for pre-built binaries we provide our own Telegram application credentials,
