@@ -9,7 +9,8 @@ use clientele::{
     SysexitsError::{self, *},
     crates::clap::{self, Parser},
 };
-use miette::{Result, miette};
+use futures::StreamExt as _;
+use miette::{IntoDiagnostic as _, Result, miette};
 // use oxrdf::{Literal, NamedNode, Triple};
 
 use asimov_telegram_module::shared;
@@ -54,11 +55,6 @@ async fn main() -> Result<SysexitsError> {
     }
 
     let target_resource = parse_resource_url(&options.resource)?;
-    let FetchTarget::Chats = target_resource else {
-        return Err(miette!(
-            "{target_resource} is not a valid target resource for cataloger"
-        ));
-    };
 
     let data_dir = shared::get_data_dir()?;
     let api_id = obfstr::obfstring!(env!("ASIMOV_TELEGRAM_API_ID"));
@@ -80,16 +76,56 @@ async fn main() -> Result<SysexitsError> {
 
     let filter = asimov_telegram_module::jq::filter();
 
-    let chats = client
-        .get_chats()
-        .await?
-        .into_iter()
-        .take(options.limit.unwrap_or(usize::MAX));
-    for (_id, chat) in chats {
-        match filter.filter_json(chat) {
-            Ok(filtered) => println!("{filtered}"),
-            Err(jq::JsonFilterError::NoOutput) => (),
-            Err(err) => tracing::error!(?err),
+    match target_resource {
+        FetchTarget::Chats => {
+            let chats = client
+                .get_chats()
+                .await?
+                .into_iter()
+                .take(options.limit.unwrap_or(usize::MAX));
+            for (_id, chat) in chats {
+                match filter.filter_json(chat) {
+                    Ok(filtered) => println!("{filtered}"),
+                    Err(jq::JsonFilterError::NoOutput) => (),
+                    Err(err) => tracing::error!(?err),
+                }
+            }
+        }
+        FetchTarget::ChatMembers { chat_id } => {
+            let mut users = client
+                .get_chat_members(chat_id, options.limit)
+                .await?
+                .boxed();
+
+            while let Some(user) = users.next().await {
+                let user = user?;
+                match filter.filter_json(user) {
+                    Ok(filtered) => println!("{filtered}"),
+                    Err(jq::JsonFilterError::NoOutput) => (),
+                    Err(err) => tracing::error!(?err, "Filter failed"),
+                }
+            }
+        }
+        FetchTarget::ChatMessages { chat_id } => {
+            let mut msgs = client
+                .get_chat_history(chat_id, None, options.limit)
+                .await?
+                .boxed();
+
+            while let Some(msg) = msgs.next().await {
+                let msg = serde_json::to_value(msg?).into_diagnostic()?;
+                match filter.filter_json(msg) {
+                    Ok(filtered) => println!("{filtered}"),
+                    Err(jq::JsonFilterError::NoOutput) => (),
+                    Err(err) => tracing::error!(?err, "Filter failed"),
+                }
+            }
+        }
+        target => {
+            // just FetchTarget::Chats
+            return Err(miette!(
+                "{target} is not a valid target resource for cataloger"
+            ));
         }
     }
 

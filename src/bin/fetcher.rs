@@ -9,8 +9,7 @@ use clientele::{
     SysexitsError::{self, *},
     crates::clap::{self, Parser},
 };
-use futures::StreamExt;
-use miette::{IntoDiagnostic, Result, miette};
+use miette::{Result, miette};
 use std::sync::Arc;
 
 use asimov_telegram_module::{parse_resource_url, shared};
@@ -83,36 +82,6 @@ async fn main() -> Result<SysexitsError> {
                 Err(err) => tracing::error!(?err, "Filter failed"),
             }
         }
-        FetchTarget::ChatMembers { chat_id } => {
-            let mut users = client
-                .get_chat_members(chat_id, options.limit)
-                .await?
-                .boxed();
-
-            while let Some(user) = users.next().await {
-                let user = user?;
-                match filter.filter_json(user) {
-                    Ok(filtered) => println!("{filtered}"),
-                    Err(jq::JsonFilterError::NoOutput) => (),
-                    Err(err) => tracing::error!(?err, "Filter failed"),
-                }
-            }
-        }
-        FetchTarget::ChatMessages { chat_id } => {
-            let mut msgs = client
-                .get_chat_history(chat_id, None, options.limit)
-                .await?
-                .boxed();
-
-            while let Some(msg) = msgs.next().await {
-                let msg = serde_json::to_value(msg?).into_diagnostic()?;
-                match filter.filter_json(msg) {
-                    Ok(filtered) => println!("{filtered}"),
-                    Err(jq::JsonFilterError::NoOutput) => (),
-                    Err(err) => tracing::error!(?err, "Filter failed"),
-                }
-            }
-        }
         FetchTarget::UserInfo { user_id } => {
             let user = client.get_user(user_id).await?;
             match filter.filter_json(user) {
@@ -122,7 +91,7 @@ async fn main() -> Result<SysexitsError> {
             }
         }
         target => {
-            // just FetchTarget::Chats
+            // FetchTarget::Chats, FetchTarget::ChatMembers, FetchTarget::ChatMessages
             return Err(miette!(
                 "{target} is not a valid target resource for fetcher"
             ));
