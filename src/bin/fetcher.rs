@@ -1,6 +1,9 @@
 // This is free and unencumbered software released into the public domain.
 
-use asimov_telegram_module::telegram::{Client, Config};
+use asimov_telegram_module::{
+    FetchTarget,
+    telegram::{Client, Config},
+};
 use clientele::{
     StandardOptions,
     SysexitsError::{self, *},
@@ -10,7 +13,7 @@ use futures::StreamExt;
 use miette::{IntoDiagnostic, Result, miette};
 use std::sync::Arc;
 
-use asimov_telegram_module::shared;
+use asimov_telegram_module::{parse_resource_url, shared};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -32,14 +35,6 @@ struct Options {
     resource: String,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum FetchTarget {
-    Chat { chat_id: i64 },
-    ChatMembers { chat_id: i64 },
-    ChatMessages { chat_id: i64 },
-    UserInfo { user_id: i64 },
-}
-
 #[tokio::main]
 async fn main() -> Result<SysexitsError> {
     // Load environment variables from `.env`:
@@ -56,6 +51,8 @@ async fn main() -> Result<SysexitsError> {
         println!("asimov-telegram-fetcher {}", env!("CARGO_PKG_VERSION"));
         return Ok(EX_OK);
     }
+
+    let target_resource = parse_resource_url(&options.resource)?;
 
     let data_dir = shared::get_data_dir()?;
     let api_id = obfstr::obfstring!(env!("ASIMOV_TELEGRAM_API_ID"));
@@ -77,7 +74,7 @@ async fn main() -> Result<SysexitsError> {
 
     let filter = asimov_telegram_module::jq::filter();
 
-    match parse_fetch_url(&options.resource)? {
+    match target_resource {
         FetchTarget::Chat { chat_id } => {
             let info = client.get_chat_info(chat_id).await?;
             match filter.filter_json(info) {
@@ -124,129 +121,13 @@ async fn main() -> Result<SysexitsError> {
                 Err(err) => tracing::error!(?err, "Filter failed"),
             }
         }
+        target => {
+            // just FetchTarget::Chats
+            return Err(miette!(
+                "{target} is not a valid target resource for fetcher"
+            ));
+        }
     }
 
     Ok(EX_OK)
-}
-
-fn parse_fetch_url(url_str: &str) -> Result<FetchTarget> {
-    let url: url::Url = url_str.parse().map_err(|e| miette!("Invalid URL: {e}"))?;
-
-    if url.scheme() != "tg" {
-        return Err(miette!("Unknown scheme `{}`, expected `tg`", url.scheme()));
-    }
-
-    // Handle both tg://host/path and tg:path formats
-    let segments: Vec<&str> = if url.cannot_be_a_base() {
-        // For tg:path format, parse the path manually
-        let path = url.path();
-        if path.is_empty() {
-            return Err(miette!("Invalid URL: no path"));
-        }
-        path.split('/').filter(|s| !s.is_empty()).collect()
-    } else {
-        // For tg://host/path format, combine host and path segments
-        let mut segments = Vec::new();
-
-        // Add host as first segment if present
-        if let Some(host) = url.host_str() {
-            segments.push(host);
-        }
-
-        // Add path segments
-        if let Some(path_segments) = url.path_segments() {
-            segments.extend(path_segments.filter(|s| !s.is_empty()));
-        }
-
-        segments
-    };
-
-    match segments.as_slice() {
-        ["chat", chat_id] => Ok(FetchTarget::Chat {
-            chat_id: chat_id
-                .parse()
-                .map_err(|e| miette!("Invalid chat ID: {chat_id:?}: {e}"))?,
-        }),
-        ["chat", chat_id, "members"] => Ok(FetchTarget::ChatMembers {
-            chat_id: chat_id
-                .parse()
-                .map_err(|e| miette!("Invalid chat ID: {chat_id:?}: {e}"))?,
-        }),
-        ["chat", chat_id, "messages"] => Ok(FetchTarget::ChatMessages {
-            chat_id: chat_id
-                .parse()
-                .map_err(|e| miette!("Invalid chat ID: {chat_id:?}: {e}"))?,
-        }),
-        ["user", user_id] => Ok(FetchTarget::UserInfo {
-            user_id: user_id
-                .parse()
-                .map_err(|e| miette!("Invalid user ID: {user_id:?}: {e}"))?,
-        }),
-        _ => Err(miette!("Unsupported URL format: {}", url_str)),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_fetch_url() {
-        let test_cases = vec![
-            ("tg://chat/12345", FetchTarget::Chat { chat_id: 12345 }),
-            ("tg:chat/12345", FetchTarget::Chat { chat_id: 12345 }),
-            (
-                "tg://chat/12345/members",
-                FetchTarget::ChatMembers { chat_id: 12345 },
-            ),
-            (
-                "tg:chat/12345/members",
-                FetchTarget::ChatMembers { chat_id: 12345 },
-            ),
-            (
-                "tg://chat/12345/messages",
-                FetchTarget::ChatMessages { chat_id: 12345 },
-            ),
-            (
-                "tg:chat/12345/messages",
-                FetchTarget::ChatMessages { chat_id: 12345 },
-            ),
-            ("tg://user/12345", FetchTarget::UserInfo { user_id: 12345 }),
-            ("tg:user/12345", FetchTarget::UserInfo { user_id: 12345 }),
-        ];
-
-        for (url, expected) in test_cases {
-            let result = parse_fetch_url(url).unwrap();
-            match (result, expected) {
-                (FetchTarget::Chat { chat_id: a }, FetchTarget::Chat { chat_id: b }) => {
-                    assert_eq!(a, b)
-                }
-                (
-                    FetchTarget::ChatMembers { chat_id: a },
-                    FetchTarget::ChatMembers { chat_id: b },
-                ) => assert_eq!(a, b),
-                (
-                    FetchTarget::ChatMessages { chat_id: a },
-                    FetchTarget::ChatMessages { chat_id: b },
-                ) => assert_eq!(a, b),
-                (FetchTarget::UserInfo { user_id: a }, FetchTarget::UserInfo { user_id: b }) => {
-                    assert_eq!(a, b)
-                }
-                _ => panic!("Unexpected target type for URL: {url}"),
-            }
-        }
-
-        let error_cases = vec![
-            ("http://chat/12345", "Unknown scheme"),
-            ("tg://chat/not_a_number", "Invalid chat ID"),
-            ("tg://user/not_a_number", "Invalid user ID"),
-            ("tg://unknown/format", "Unsupported URL format"),
-        ];
-
-        for (url, expected_error) in error_cases {
-            let result = parse_fetch_url(url);
-            assert!(result.is_err());
-            assert!(result.unwrap_err().to_string().contains(expected_error));
-        }
-    }
 }

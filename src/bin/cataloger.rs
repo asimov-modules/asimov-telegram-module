@@ -1,6 +1,9 @@
 // This is free and unencumbered software released into the public domain.
 
-use asimov_telegram_module::telegram::{Client, Config};
+use asimov_telegram_module::{
+    FetchTarget, parse_resource_url,
+    telegram::{Client, Config},
+};
 use clientele::{
     StandardOptions,
     SysexitsError::{self, *},
@@ -25,6 +28,8 @@ struct Options {
     /// The output format.
     #[arg(value_name = "FORMAT", short = 'o', long)]
     output: Option<String>,
+
+    resource: String,
 }
 
 #[tokio::main]
@@ -47,6 +52,13 @@ async fn main() -> Result<SysexitsError> {
         println!("asimov-telegram {}", env!("CARGO_PKG_VERSION"));
         return Ok(EX_OK);
     }
+
+    let target_resource = parse_resource_url(&options.resource)?;
+    let FetchTarget::Chats = target_resource else {
+        return Err(miette!(
+            "{target_resource} is not a valid target resource for cataloger"
+        ));
+    };
 
     let data_dir = shared::get_data_dir()?;
     let api_id = obfstr::obfstring!(env!("ASIMOV_TELEGRAM_API_ID"));
