@@ -1,4 +1,5 @@
 # See: https://asimov-specs.github.io/module-manifest/
+---
 name: telegram
 label: Telegram
 summary: Data import from a Telegram account
