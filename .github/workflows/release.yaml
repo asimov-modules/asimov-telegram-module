@@ -53,9 +53,3 @@ jobs:
           ENV["RUSTFLAGS"] = "-L /usr/lib/x86_64-linux-gnu"
           system "sudo", "apt-get", "install", "-y", "libc++-dev", "libc++abi-dev"
         end
-      brew_macos_x86_dependencies: |
-        # https://github.com/actions/runner-images/issues/9966
-        brew list -1 | grep python@ | while read formula; do
-            brew unlink $formula
-            brew link --overwrite $formula
-        done
