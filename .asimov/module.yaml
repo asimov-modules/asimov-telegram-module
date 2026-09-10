@@ -7,7 +7,7 @@ links:
   - https://github.com/asimov-modules/asimov-telegram-module
 provides:
   programs:
-    - asimov-telegram-cataloger
+    - asimov-telegram-lister
     - asimov-telegram-configurator
     - asimov-telegram-fetcher
 handles:

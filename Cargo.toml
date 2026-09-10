@@ -79,8 +79,8 @@ strip = true
 lto = "thin"
 
 [[bin]]
-name = "asimov-telegram-cataloger"
-path = "src/bin/cataloger.rs"
+name = "asimov-telegram-lister"
+path = "src/bin/lister.rs"
 
 [[bin]]
 name = "asimov-telegram-configurator"

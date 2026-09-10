@@ -43,7 +43,7 @@ asimov-telegram-configurator
 ### Listing Telegram chats
 
 ```
-asimov-telegram-cataloger tg://chats
+asimov-telegram-lister tg://chats
 ```
 
 ### Fetching Telegram chat info
@@ -55,13 +55,13 @@ asimov-telegram-fetcher tg://chats/1234567
 ### Listing Telegram chat members
 
 ```
-asimov-telegram-cataloger tg://chats/1234567/members
+asimov-telegram-lister tg://chats/1234567/members
 ```
 
 ### Listing Telegram chat messages
 
 ```
-asimov-telegram-cataloger tg://chats/1234567/messages
+asimov-telegram-lister tg://chats/1234567/messages
 ```
 
 ### Fetching Telegram user info

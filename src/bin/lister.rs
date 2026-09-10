@@ -15,9 +15,9 @@ use miette::{IntoDiagnostic as _, Result, miette};
 
 use asimov_telegram_module::shared;
 
-/// ASIMOV Telegram Cataloger
+/// ASIMOV Telegram Lister
 #[derive(Debug, Parser)]
-#[command(name = "asimov-telegram-cataloger", long_about)]
+#[command(name = "asimov-telegram-lister", long_about)]
 struct Options {
     #[clap(flatten)]
     flags: StandardOptions,
@@ -124,7 +124,7 @@ async fn main() -> Result<SysexitsError> {
         target => {
             // just FetchTarget::Chats
             return Err(miette!(
-                "{target} is not a valid target resource for cataloger"
+                "{target} is not a valid target resource for lister"
             ));
         }
     }
